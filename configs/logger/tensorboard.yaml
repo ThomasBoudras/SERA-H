@@ -1,0 +1,10 @@
+# https://www.tensorflow.org/tensorboard
+
+tensorboard:
+    _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    save_dir: ${data_dir}/tensorboard_logs/${project}
+    name: ${run_name}
+    version: ${run_version}  # Sets the version, mainly used to resume a previous run.
+    log_graph: False  # If True, logs the model graph.
+    default_hp_metric: True  # If True, logs the default hyperparameter metric.
+    prefix: ""  # Prefix added to all metrics and logs for this run.

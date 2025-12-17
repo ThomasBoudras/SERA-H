@@ -1,0 +1,30 @@
+# @package _global_
+
+defaults:
+    - override /module/regression_model: unet
+    - override /datamodule/dataset/get_inputs: s1_s2_composites
+    - override /callbacks/image_type: s1_s2_composites
+
+project: "train_sera"
+run_name: h-edsr_unet_as
+run_version: v1_${run_name}
+data_dir: data
+ckpt_path: last
+
+module:
+    super_resolution_model: 
+        input_type: COMPOSITES
+    metrics:
+        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+        classification_path: ${data_dir}/open_canopy/
+
+datamodule:
+    instance:
+        batch_size: 8
+    dataset:
+        patch_size_input: 32
+        patch_size_target: 128
+        gdf_path: ${data_dir}/sentinel/composites/lidarhd/gdf_height_map_composites.geojson
+        get_targets:
+            targets_path: ${data_dir}/open_canopy/
+

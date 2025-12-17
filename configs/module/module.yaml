@@ -1,0 +1,32 @@
+defaults:
+  - regression_model: utae
+  - super_resolution_model: edsr
+  - loss: huber
+  - metrics: masked_forest_metrics
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 1e-4
+  weight_decay: 0.0
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 5
+  threshold: 0.05  # Minimal change to qualify as improvement
+  threshold_mode: 'abs'
+
+instance:
+  _target_: src.module.module.Module
+  regression_model: ${module.regression_model}
+  super_resolution_model: ${module.super_resolution_model}
+  loss: ${module.loss}
+  train_metrics: ${module.metrics.train_metrics}
+  val_metrics: ${module.metrics.val_metrics}
+  test_metrics: ${module.metrics.test_metrics}
+  optimizer: ${module.optimizer}
+  scheduler: ${module.scheduler}
+  predictions_save_dir : ${log_dir}/predictions

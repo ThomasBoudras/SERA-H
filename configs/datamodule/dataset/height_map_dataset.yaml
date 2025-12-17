@@ -1,0 +1,59 @@
+defaults :
+  - get_inputs : s1_s2_timeseries
+  - get_targets : lidar
+
+gdf_path: ${data_dir}/sentinel/timeseries/lidarhd/gdf_height_map_timeseries.geojson
+resolution_input: 10
+resolution_target: 2.5
+patch_size_input: 64
+patch_size_target: 256
+
+train_dataset: 
+  _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
+  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_target: ${datamodule.dataset.resolution_target}
+  patch_size_input: ${datamodule.dataset.patch_size_input}
+  patch_size_target: ${datamodule.dataset.patch_size_target}
+  gdf_path: ${datamodule.dataset.gdf_path}
+  data_augmentation : False
+  get_inputs :  ${datamodule.dataset.get_inputs}
+  get_targets : ${datamodule.dataset.get_targets}
+  stage: train
+
+val_dataset:
+  _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
+  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_target: ${datamodule.dataset.resolution_target}
+  patch_size_input: ${datamodule.dataset.patch_size_input}
+  patch_size_target: ${datamodule.dataset.patch_size_target}
+  gdf_path: ${datamodule.dataset.gdf_path}
+  data_augmentation : False
+  get_inputs :  ${datamodule.dataset.get_inputs}
+  get_targets : ${datamodule.dataset.get_targets}
+  stage: val
+
+test_dataset:
+  _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
+  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_target: ${datamodule.dataset.resolution_target}
+  patch_size_input: ${datamodule.dataset.patch_size_input}
+  patch_size_target: ${datamodule.dataset.patch_size_target}
+  gdf_path: ${datamodule.dataset.gdf_path}
+  data_augmentation : False
+  get_inputs :  ${datamodule.dataset.get_inputs}
+  get_targets : ${datamodule.dataset.get_targets}
+  stage: test
+
+predict_dataset:
+  _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
+  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_target: ${datamodule.dataset.resolution_target}
+  patch_size_input: ${datamodule.dataset.patch_size_input}
+  patch_size_target: ${datamodule.dataset.patch_size_target}
+  gdf_path: ${datamodule.dataset.gdf_path}
+  data_augmentation : False
+  get_inputs :  ${datamodule.dataset.get_inputs}
+  get_targets : 
+    _target_: src.datamodule.dataset.get_targets.nan.getNan
+  stage: predict
+  

@@ -1,0 +1,10 @@
+defaults:
+    - default.yaml
+    - image_type : s1_s2_timeseries
+
+log_image_predictions:
+    _target_: src.callbacks.log_images.LogImages
+    num_samples: 8
+    freq_train : null
+    prepare_images: ${callbacks.image_type.prepare_images}
+    log_inputs: ${callbacks.image_type.log_inputs}

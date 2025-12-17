@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+logs/
+wandb/
+data/sentinel/
+data/open_canopy/
+.env
+.venv/
+venv/
+env/
+.DS_Store
+.gitignore

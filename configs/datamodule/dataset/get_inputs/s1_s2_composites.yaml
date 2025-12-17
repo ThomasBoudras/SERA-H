@@ -1,0 +1,6 @@
+_target_: src.datamodule.dataset.get_inputs.s1_s2_composites.getS1S2Composites
+inputs_path: ${data_dir}/sentinel/composites/lidarhd/
+resolution_input: ${datamodule.dataset.resolution_input}
+date_column: lidar_acquisition_date
+resampling_method: bilinear
+open_even_oob : False

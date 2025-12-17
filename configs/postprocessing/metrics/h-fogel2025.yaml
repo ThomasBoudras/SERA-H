@@ -1,0 +1,274 @@
+model : h-fogel2025
+min_height : 0
+max_height : 50
+resolution : 2.5
+real_patch_size_plot : 500
+nb_jobs : 10
+seed : 12345
+date_column : lidar_acquisition_date
+print_config : True
+nb_plots : 50
+
+data_dir : data/
+save_dir : ${data_dir}/logs/metrics/height_map/${model}
+output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
+grouping_dates : lidar_acquisition_date
+version_metrics : test_lidarhd
+
+geometries_path : ${data_dir}/logs/pred_sera/h-sera_h/test_lidarhd/predictions/predict_gdf.geojson
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir : hydra_logs
+
+get_images : 
+  _target_ : src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:
+    sentinel_rgb :
+      _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
+      path: ${data_dir}/sentinel/composites/lidarhd/lidar_date_<date>/s2/s2.vrt
+      resolution: null
+      resampling_method: bilinear
+      open_even_oob: True
+      channel_to_keep: [2,1,0]
+      grouping_dates: ${grouping_dates}
+      
+    spot_rgb :
+      _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
+      path: ${data_dir}/open_canopy/<year>/spot.vrt
+      resolution: null
+      resampling_method: bilinear
+      open_even_oob: True
+      channel_to_keep: [0,1,2]
+      grouping_dates: ${grouping_dates}
+    
+    height_pred : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/open_canopy/<year>/pred.vrt
+      #_target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      #path: ${data_dir}/logs/pred_sera/${model}/${name_aoi}/predictions/data/preds/${model}_preds_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_target : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    vegetation_mask :
+      _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
+      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      resolution: ${resolution}
+      classes_to_keep: [5]
+      grouping_dates: ${grouping_dates}
+    
+  image_computed_set:
+    masked_height_pred :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred
+      mask_name: vegetation_mask
+
+    masked_height_target :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_target
+      mask_name: vegetation_mask
+
+    difference_pred_target :
+      _target_: src.postprocessing.metrics.get_images_utils.difference_computer
+      input_name_1: height_pred
+      input_name_2: height_target
+      min_image: -${max_height}
+      max_image: ${max_height}
+    
+get_metrics_local : 
+  _target_ : src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set :
+    component_mae :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mae_component_computer
+      name_pred: masked_height_pred
+      name_target: masked_height_target
+    component_rmse :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.rmse_component_computer
+      name_pred: masked_height_pred
+      name_target: masked_height_target
+    component_me :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.me_component_computer
+      name_pred: masked_height_pred
+      name_target: masked_height_target
+    component_nmae :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.nmae_component_computer
+      name_pred: masked_height_pred
+      name_target: masked_height_target
+      min_target: 2
+    component_treecover :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.treecover_local_computer
+      name_pred: height_pred
+      name_target: height_target
+      threshold: 2
+
+    mae_local :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
+      metric_component_name: component_mae
+    rmse_local :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
+      metric_component_name: component_rmse
+      root : True
+    me_local :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
+      metric_component_name: component_me
+    nmae_local :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
+      metric_component_name: component_nmae
+    treecover_local :
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
+      metric_component_name: component_treecover
+
+
+get_metrics_global :
+  _target_ : src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_print : all
+  metrics_set :
+    mae_global :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur
+      name_metric : component_mae
+    rmse_global :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur
+      name_metric : component_rmse
+      root : True
+    me_global :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur
+      name_metric : component_me
+    nmae_global :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur
+      name_metric : component_nmae
+    treecover_global :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur
+      name_metric : component_treecover
+    nb_values_global_mae :
+      _target_ : src.postprocessing.metrics.get_metrics_global_utils.nb_values_global_computer
+      name_metric : component_mae
+
+
+get_plots_local: 
+  _target_: src.postprocessing.metrics.get_plots_local_utils.get_plots_local
+  save_dir : ${save_dir}/${version_metrics}_figures
+  nb_plots: ${nb_plots}
+  model_name : ${model}
+  plot_set :
+    height_metrics :
+      _target_ : src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 4
+      nb_col : 2
+      size_plot_width: 15
+      size_plot_height: 30
+      graph_list : 
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: "Sentinel-RGB"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : sentinel_rgb
+            real_patch_size: ${real_patch_size_plot}
+            resolution: 10
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: "Spot-RGB"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : spot_rgb
+            real_patch_size: ${real_patch_size_plot}
+            resolution: 1.5
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 0
+          graph_title: "Predicted height"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : height_pred
+            real_patch_size: ${real_patch_size_plot}
+            resolution: ${resolution}
+            cmap: magma
+            norm : 
+              _target_ : matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax : ${max_height}
+
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 1
+          graph_title: "Target height"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : height_target
+            real_patch_size: ${real_patch_size_plot}
+            resolution: ${resolution}
+            cmap: magma
+            norm : 
+              _target_ : matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax : ${max_height}
+
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 2
+          idx_col: 0
+          graph_title: "Difference"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : difference_pred_target
+            real_patch_size: ${real_patch_size_plot}
+            resolution: ${resolution}
+            cmap: RdBu_r
+            norm : 
+              _target_ : matplotlib.colors.Normalize
+              vmin: -${max_height}
+              vmax : ${max_height}
+
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 2
+          idx_col: 1
+          graph_title: "Vegetation mask"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow 
+            image_name : vegetation_mask
+            real_patch_size: ${real_patch_size_plot}
+            resolution: ${resolution}
+            cmap: Greens
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 3
+          idx_col: 0
+          colspan: 2
+          graph_title: "Metrics"
+          grouping_dates: ${grouping_dates}
+          method_graph: 
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_table
+            metrics_list : [mae_local, rmse_local, me_local, nmae_local, treecover_local]
+            font_size : 14
+            table_width_scale : 0.7
+            table_height_scale : 1.8
+
+
+get_plots_global: null

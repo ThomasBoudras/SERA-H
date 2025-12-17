@@ -1,0 +1,9 @@
+_target_: src.module.super_resolution_model.edsr.EDSR
+n_resblocks: 32
+scale: 4
+n_feats: 256
+n_channels: 14
+res_scale: 0.1
+pretrained_model_path: ${data_dir}/utils/EDSR_x4.pt
+input_type: TIMESERIES
+freeze_model: False

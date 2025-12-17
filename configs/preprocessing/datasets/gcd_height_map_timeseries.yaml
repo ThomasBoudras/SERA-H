@@ -1,0 +1,21 @@
+root_dir: data/
+data_dir: ${root_dir}/sentinel/timeseries/lidarhd
+
+create_vrts: src.preprocessing.datasets.get_clean_dataset_utils.create_vrts_timeseries
+get_valid_vrts: src.preprocessing.datasets.get_clean_dataset_utils.get_valid_vrts_timeseries
+
+n_jobs_parrallelized: -1
+
+via_bounds: null
+via_geojson:
+  path: ${root_dir}/utils/gdf_height_map_initial.geojson
+
+grouping_dates_column: lidar_acquisition_date
+validation_column: valid_vrts
+gdf_clean_path: ${data_dir}/gdf_height_map_timeseries.geojson
+gdf_unclean_path: ${data_dir}/gdf_height_map_timeseries_unsaved.geojson
+
+hydra:
+  run :
+    dir : ${data_dir}/logs
+  output_subdir : hydra_logs

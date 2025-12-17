@@ -1,0 +1,29 @@
+# @package _global_
+
+defaults:
+    - _self_
+    - trainer: default.yaml
+    - module: module.yaml
+    - datamodule: datamodule.yaml
+    - callbacks: tensorboard.yaml 
+    - logger: tensorboard.yaml 
+    - hydra: default.yaml
+
+    - train: null
+    - predict: null
+
+
+
+project : "sera"
+run_name: h-sera_h
+run_version: v1_${run_name}
+test_after_training: True
+print_config: True
+seed: 12345
+
+work_dir: ${hydra:runtime.cwd}
+data_dir: ./
+log_dir: ${data_dir}/logs/${project}/${run_name}/${run_version}
+
+ckpt_path: null
+load_just_weights: False

@@ -1,0 +1,5 @@
+_target_: src.module.regression_model.unet.UNet
+n_channels_in: 14
+bilinear: False
+out_activation: null
+width_multiplier: 1

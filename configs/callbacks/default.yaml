@@ -1,0 +1,32 @@
+model_checkpoint_best: # Save the best checkpoint of the training
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${log_dir}/best_checkpoints/
+    filename: "epoch_{epoch:03d}"
+    monitor: "val/loss" 
+    mode: "min" 
+    save_top_k: 5 
+    save_last: False 
+    auto_insert_metric_name: False
+    save_on_train_epoch_end: False
+
+model_checkpoint_last:  # Save the last checkpoint of the training if we need to resume training
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${log_dir}/last_checkpoints/
+    filename: "save_epoch_{epoch:03d}"
+    every_n_epochs: 1
+    save_top_k: 0    
+    save_last: True
+    auto_insert_metric_name: False
+    save_on_train_epoch_end: True
+
+early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: "val/loss" 
+    mode: "min"     
+    patience: 10 
+    min_delta: 0.05 
+
+learning_rate_monitor:
+  _target_: lightning.pytorch.callbacks.LearningRateMonitor
+  logging_interval: "epoch" 
+

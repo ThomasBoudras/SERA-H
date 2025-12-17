@@ -1,0 +1,15 @@
+defaults:
+  - dataset: height_map_dataset
+
+instance:
+  _target_: src.datamodule.datamodule.Datamodule
+  batch_size: 2
+  num_workers: 8
+  persistent_workers: True
+  max_n_inputs_for_moments_computation: 1000
+  max_n_inputs_per_epoch: null
+  normalization_save_path: ${data_dir}/normalization/sentinel_height
+  train_dataset: ${datamodule.dataset.train_dataset}
+  val_dataset: ${datamodule.dataset.val_dataset}
+  test_dataset: ${datamodule.dataset.test_dataset}
+  predict_dataset: ${datamodule.dataset.predict_dataset}

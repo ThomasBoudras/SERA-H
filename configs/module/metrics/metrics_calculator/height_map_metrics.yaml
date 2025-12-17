@@ -1,0 +1,3 @@
+_target_: src.module.metrics.metrics_calculator.height_map_metrics.heightMapMetrics
+tree_cover_threshold: 2
+min_height_nMAE: 2

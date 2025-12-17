@@ -1,0 +1,28 @@
+root_dir: data/
+data_dir: ${root_dir}/sentinel/composites/lidarhd
+gdf_path : ${root_dir}/utils/gdf_height_map_initial.geojson
+gee_project: 
+  - "project_gee_1"
+  - "project_gee_2"
+
+grouping_dates: lidar_acquisition_date
+
+n_jobs_parrallelized : 1
+
+resolution : 10
+tile_shape : 5000
+max_tile_size : 10
+cloudless_portion : 60
+cloud_prb : 40
+country : "France"
+composite_method_s1 : MEAN
+composite_method_s2 : MEDIAN
+duration : 60
+s1_orbit : BOTH
+
+hydra:
+  run :
+    dir : ${data_dir}/logs
+  output_subdir : hydra_logs
+
+

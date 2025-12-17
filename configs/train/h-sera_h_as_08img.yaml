@@ -1,0 +1,25 @@
+# @package _global_
+
+project: "train_sera"
+run_name: h-sera_h_as_08img
+run_version: v1_${run_name}
+data_dir: data
+ckpt_path: last
+
+module:
+    metrics:
+        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+        classification_path: ${data_dir}/open_canopy/
+
+datamodule:
+    instance:
+        batch_size: 8
+
+    dataset:
+        patch_size_input: 32
+        patch_size_target: 128
+        get_inputs:
+            nb_timeseries_image: 8
+        get_targets:
+            targets_path: ${data_dir}/open_canopy/
+

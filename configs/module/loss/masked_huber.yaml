@@ -1,0 +1,3 @@
+_target_: src.module.loss.masked_huber.MaskedHuber
+reduction: mean   
+beta: 1.0  

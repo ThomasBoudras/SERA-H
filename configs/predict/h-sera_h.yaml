@@ -1,0 +1,32 @@
+# @package _global_
+
+defaults:
+  - override /train: h-sera_h
+  - _self_
+
+project : "pred_sera"
+run_version: test_lidarhd
+
+ckpt_path : ${data_dir}/logs/train_sera/${run_name}/v1_${run_name}/best_checkpoints/epoch_031.ckpt
+load_just_weights: True
+
+save_dir: ${log_dir}/predictions
+
+via_bounds : null
+via_geojson :
+  path : ${data_dir}/sentinel/timeseries/lidarhd/gdf_height_map_timeseries.geojson
+  split: test
+
+datamodule:
+  dataset:
+    predict_dataset: 
+      get_inputs: 
+        open_even_oob: True
+
+
+model:
+  instance:
+    train_metrics: null
+    val_metrics: null 
+    test_metrics: null
+    predictions_save_dir : ${save_dir}    

@@ -1,0 +1,7 @@
+_target_: src.datamodule.dataset.get_targets.lidar.getLidarImages
+targets_path: ${data_dir}/lidar/
+resolution_target: ${datamodule.dataset.resolution_target}
+replace_nan_by_zero_in_target: True
+date_column: lidar_acquisition_date
+unit_column: lidar_unit
+resampling_method: max
