@@ -174,12 +174,14 @@ SERA-H/
 If you find this code useful for your research, please cite our paper:
 
 ```bibtex
-@article{boudras2025serah,
-  title = {{SERA-H}: High-resolution annual canopy height mapping at 2.5 m resolution using freely available {Sentinel} data by combining super-resolution and multi-temporal imaging},
-  author = {Boudras, Thomas and Schwartz, Martin and Fensholt, Rasmus and Brandt, Martin and Fayad, Ibrahim and Wigneron, Jean-Pierre and Fogel, Fajwel and Belouze, Gabriel and Ciais, Philippe},
-  journal = {Submitted to Remote Sensing of Environment},
-  year = {2025},
-  note = {preprint}
+@misc{boudras2025serahnativesentinelspatial,
+      title={SERA-H: Beyond Native Sentinel Spatial Limits for High-Resolution Canopy Height Mapping}, 
+      author={Thomas Boudras and Martin Schwartz and Rasmus Fensholt and Martin Brandt and Ibrahim Fayad and Jean-Pierre Wigneron and Gabriel Belouze and Fajwel Fogel and Philippe Ciais},
+      year={2025},
+      eprint={2512.18128},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2512.18128}, 
 }
 ```
 
