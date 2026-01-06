@@ -5,8 +5,9 @@
 [![Hydra](https://img.shields.io/badge/Config-Hydra_1.3-89b8cd)](https://hydra.cc/)
 [![Lightning](https://img.shields.io/badge/-Lightning_2.5-792ee5)](https://lightning.ai/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![arXiv](https://img.shields.io/badge/arXiv-2512.18128-b31b1b.svg)](https://arxiv.org/abs/2512.18128)
 
-> **Note**: This is the official implementation of the paper **"SERA-H: Beyond Native Sentinel Spatial Limits for High-Resolution Canopy Height Mapping"**.
+> **Note**: This is the official implementation of the paper **["SERA-H: Beyond Native Sentinel Spatial Limits for High-Resolution Canopy Height Mapping"](https://arxiv.org/abs/2512.18128)**.
 
 ## Abstract
 High-resolution mapping of canopy height is essential for forest management and biodiversity monitoring. Although recent studies have led to the advent of deep learning methods using satellite imagery to predict height maps, these approaches often face a trade-off between data accessibility and spatial resolution. To overcome these limitations, we present SERA-H, an end-to-end model combining a super-resolution module (EDSR) and temporal attention encoding (UTAE). Trained under the supervision of high-density LiDAR data (ALS), our model generates 2.5 m resolution height maps from freely available Sentinel-1 and Sentinel-2 (10 m) time series data. Evaluated on an open-source benchmark dataset in France, SERA-H, with a MAE of 2.6 m and R² of 0.82, not only outperforms standard Sentinel-1/2 baselines but also achieves performance comparable to or better than methods relying on commercial very high-resolution imagery (SPOT-6/7, PlanetScope, Maxar). These results demonstrate that combining high-resolution supervision with the spatiotemporal information embedded in time series enables the reconstruction of details beyond the input sensors' native resolution. SERA-H opens the possibility of freely mapping forests with high revisit frequency, achieving accuracy comparable to that of costly commercial imagery.
