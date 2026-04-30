@@ -25,6 +25,7 @@ class Datamodule(L.LightningDataModule):
         val_dataset,
         test_dataset,
         predict_dataset,
+        mode,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -40,34 +41,29 @@ class Datamodule(L.LightningDataModule):
             # Instantiate a temporary dataset for calculation
             temp_train_dataset = self.hparams.train_dataset
             
-            def get_mean_std(sample, axis):
-                x, y , meta_data = sample
-                x = x.squeeze().to(torch.float32)  
-                if len(x.shape) == 4:
-                    x = x[0]
-                if "inputs_seperation" in meta_data:
-                    x = x[:meta_data["inputs_seperation"], ...] 
+            mean_std_per_image = []
+            while len(mean_std_per_image) < self.hparams.max_n_inputs_for_moments_computation:
+                index = np.random.randint(0, len(temp_train_dataset))
+                x, y, metadata = temp_train_dataset[index]
                 x[~torch.isfinite(x)] = 0
-                return x.mean(axis=axis), x.std(axis=axis)
-
-            sampled_indices = np.random.choice(
-                len(temp_train_dataset),
-                min(len(temp_train_dataset), self.hparams.max_n_inputs_for_moments_computation),
-                replace=False
-            )
-
-            mean_per_image, std_per_image = zip(
-                *[
-                    get_mean_std(temp_train_dataset[ix], axis=(1, 2))
-                    for ix in tqdm(sampled_indices, desc="Computing mean and std of inputs")
-                ]
-            )
+                if len(x.shape) == 4:
+                    for i in range(x.shape[0]):
+                        x_i = x[i]
+                        mean_std = (x_i.mean(axis=(1, 2)), x_i.std(axis=(1, 2)))
+                        mean_std_per_image.append(mean_std)
+                else:
+                    mean_std = (x.mean(axis=(1, 2)), x.std(axis=(1, 2)))
+                    mean_std_per_image.append(mean_std)
+            mean_per_image, std_per_image = zip(*mean_std_per_image)
 
             input_mean = np.mean(np.array(mean_per_image), axis=0)
             input_std = np.mean(np.array(std_per_image), axis=0)
 
             np.save(self.normalization_save_path / "mean.npy", input_mean)
             np.save(self.normalization_save_path / "std.npy", input_std)
+
+            log.info(f"Mean value computed and saved: {input_mean}")
+            log.info(f"Std value computed and saved: {input_std}")
 
     def setup(self, stage: str):
         # This method is called on every rank.
@@ -87,17 +83,21 @@ class Datamodule(L.LightningDataModule):
         
         if self.train_dataset is not None :
             self.train_dataset.update_moments_transforms(self.input_mean, self.input_std, transform_input)
+            self.train_dataset.set_mode(self.hparams.mode)
         if self.val_dataset is not None :
             self.val_dataset.update_moments_transforms(self.input_mean, self.input_std, transform_input)
+            self.val_dataset.set_mode(self.hparams.mode)
         if self.test_dataset is not None :
             self.test_dataset.update_moments_transforms(self.input_mean, self.input_std, transform_input)
+            self.test_dataset.set_mode(self.hparams.mode)
         if self.predict_dataset is not None :
             self.predict_dataset.update_moments_transforms(self.input_mean, self.input_std, transform_input)
+            self.predict_dataset.set_mode(self.hparams.mode)
         
 
     def train_dataloader(self):
         sampler = None
-        shuffle = True
+        shuffle = True if self.hparams.mode == "load" else False
         if self.hparams.max_n_inputs_per_epoch:
             sampler = SubsetSampler(self.train_dataset, self.hparams.max_n_inputs_per_epoch, True)
             shuffle = False
@@ -106,13 +106,12 @@ class Datamodule(L.LightningDataModule):
             self.train_dataset,
             batch_size=self.hparams.batch_size,
             shuffle=shuffle,
-            drop_last=True,
+            drop_last=False,
             pin_memory=True,
             num_workers=self.hparams.num_workers,
             persistent_workers=self.hparams.persistent_workers,
             sampler=sampler,
-            collate_fn=self.train_dataset.custom_collate_fn if hasattr(self.train_dataset, 'custom_collate_fn') else None,
-            timeout=600,
+            collate_fn=self.train_dataset.collate_fn,
         )
 
     def val_dataloader(self):
@@ -120,7 +119,7 @@ class Datamodule(L.LightningDataModule):
         if self.hparams.max_n_inputs_per_epoch:
             sampler = SubsetSampler(self.val_dataset, self.hparams.max_n_inputs_per_epoch, False)
         
-        return DataLoader(
+        return  DataLoader(
             self.val_dataset,
             batch_size=self.hparams.batch_size,
             shuffle=False,
@@ -128,8 +127,7 @@ class Datamodule(L.LightningDataModule):
             num_workers=self.hparams.num_workers,
             persistent_workers=self.hparams.persistent_workers,
             sampler=sampler,
-            collate_fn=self.val_dataset.custom_collate_fn if hasattr(self.val_dataset, 'custom_collate_fn') else None,
-            timeout=600,
+            collate_fn=self.val_dataset.collate_fn,
         )
 
     def test_dataloader(self):
@@ -145,8 +143,7 @@ class Datamodule(L.LightningDataModule):
             num_workers=self.hparams.num_workers,
             persistent_workers=self.hparams.persistent_workers,
             sampler=sampler,
-            collate_fn=self.test_dataset.custom_collate_fn if hasattr(self.test_dataset, 'custom_collate_fn') else None,
-            timeout=600,
+            collate_fn=self.test_dataset.collate_fn,
         )
 
     def predict_dataloader(self):
@@ -158,8 +155,7 @@ class Datamodule(L.LightningDataModule):
             num_workers=self.hparams.num_workers,
             persistent_workers=self.hparams.persistent_workers,
             sampler=None,
-            collate_fn=self.predict_dataset.custom_collate_fn if hasattr(self.predict_dataset, 'custom_collate_fn') else None,
-            timeout=600,
+            collate_fn=self.predict_dataset.collate_fn,
         )
 
     

@@ -9,3 +9,4 @@ vrts_column: valid_vrts
 date_column: lidar_acquisition_date
 resampling_method: bilinear
 open_even_oob: False
+input_combination_mode: s2_s1asc_s1dsc

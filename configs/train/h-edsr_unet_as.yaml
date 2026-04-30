@@ -7,8 +7,8 @@ defaults:
 
 project: "train_sera"
 run_name: h-edsr_unet_as
-run_version: v1_${run_name}
-data_dir: data
+run_version: vx_${run_name}
+data_dir: data/
 ckpt_path: last
 
 module:

@@ -107,6 +107,23 @@ class method_imshow :
         ax.axis("off")
         
 
+
+class method_bar :
+    def __init__(self, metrics_list, y_min, y_max):
+        self.metrics_list = metrics_list
+        self.y_min = y_min
+        self.y_max = y_max
+
+    def __call__(self, images, metrics, ax, row) :
+        for key in self.metrics_list :
+            if key not in metrics :
+                Exception(f"You must first compute metric {key}")
+        ax.bar(self.metrics_list, [metrics[key] for key in self.metrics_list])
+        ax.set_ylim(self.y_min, self.y_max)
+        ax.grid(color="gray", linestyle="dashed", axis="y")
+        plt.xticks(rotation=40)
+
+
 class method_table :
     def __init__(self, metrics_list, font_size, table_width_scale, table_height_scale):
         self.metrics_list = metrics_list
@@ -139,3 +156,4 @@ class method_table :
         table.scale(self.table_width_scale, self.table_height_scale)
         
         ax.axis('off')
+

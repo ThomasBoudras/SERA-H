@@ -5,7 +5,7 @@ class TemporallySharedBlock(nn.Module):
     """
     Helper module for convolutional encoding blocks that are shared across a sequence.
     This module adds the self.smart_forward() method the the block.
-    smart_forward will combine the batch and temporal dimension of an input tensor
+    smart_forward will combine the batch and temporal dimension of an inputs tensor
     if it is 5-D and apply the shared convolutions to all the (batch x temp) positions.
     """
 
@@ -14,23 +14,23 @@ class TemporallySharedBlock(nn.Module):
         self.out_shape = None
         self.pad_value = pad_value
 
-    def smart_forward(self, input):
-        if len(input.shape) == 4:
-            return self.forward(input)
+    def smart_forward(self, inputs):
+        if len(inputs.shape) == 4:
+            return self.forward(inputs)
         else:
-            b, t, c, h, w = input.shape
+            b, t, c, h, w = inputs.shape
 
             if self.pad_value is not None:
-                dummy = torch.zeros(input.shape, device=input.device, dtype=input.dtype)
+                dummy = torch.zeros(inputs.shape, device=inputs.device, dtype=inputs.dtype)
                 self.out_shape = self.forward(dummy.view(b * t, c, h, w)).shape
 
-            out = input.view(b * t, c, h, w)
+            out = inputs.view(b * t, c, h, w)
             if self.pad_value is not None:
                 pad_mask = (out == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
                 if pad_mask.any():
                     temp = (
                         torch.ones(
-                            self.out_shape, device=input.device, requires_grad=False
+                            self.out_shape, device=inputs.device, requires_grad=False
                         )
                         * self.pad_value
                     )
@@ -90,8 +90,8 @@ class ConvLayer(nn.Module):
                 layers.append(nn.ReLU())
         self.conv = nn.Sequential(*layers)
 
-    def forward(self, input):
-        return self.conv(input)
+    def forward(self, inputs):
+        return self.conv(inputs)
 
 
 class ConvBlock(TemporallySharedBlock):
@@ -111,8 +111,8 @@ class ConvBlock(TemporallySharedBlock):
             padding_mode=padding_mode,
         )
 
-    def forward(self, input):
-        return self.conv(input)
+    def forward(self, inputs):
+        return self.conv(inputs)
 
 
 class DownConvBlock(TemporallySharedBlock):
@@ -147,8 +147,8 @@ class DownConvBlock(TemporallySharedBlock):
             padding_mode=padding_mode,
         )
 
-    def forward(self, input):
-        out = self.down(input)
+    def forward(self, inputs):
+        out = self.down(inputs)
         out = self.conv1(out)
         out = out + self.conv2(out)
         return out
@@ -179,8 +179,8 @@ class UpConvBlock(nn.Module):
             nkernels=[d_out, d_out], norm=norm, padding_mode=padding_mode
         )
 
-    def forward(self, input, skip):
-        out = self.up(input)
+    def forward(self, inputs, skip):
+        out = self.up(inputs)
         out = torch.cat([out, self.skip_conv(skip)], dim=1)
         out = self.conv1(out)
         out = out + self.conv2(out)
@@ -215,14 +215,14 @@ class UpConvBlockMF(nn.Module):
             nkernels=[d_out, d_out], norm=norm, padding_mode=padding_mode
         )
 
-    def forward(self, input, skip_t1, skip_t2):
-        out = self.up(input)
+    def forward(self, inputs, skip_t1, skip_t2):
+        out = self.up(inputs)
         if self.coupling_mode == "difference" :
             skip = self.skip_conv(skip_t2) - self.skip_conv(skip_t1)
             out = torch.cat([out, skip], dim=1)
 
         elif self.coupling_mode == "concat" :
-            out_separation = input.shape[1]//2
+            out_separation = inputs.shape[1]//2
             out_t1 = out[:, :out_separation,:, :].contiguous()
             out_t2 = out[:, out_separation:, :, :].contiguous()
             out = torch.cat([out_t1, self.skip_conv(skip_t1), out_t2, self.skip_conv(skip_t2)], dim=1)

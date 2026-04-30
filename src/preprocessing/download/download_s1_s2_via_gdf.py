@@ -9,13 +9,16 @@ from retry import retry
 import logging
 from shapely.ops import unary_union
 from pathlib import Path
-from joblib import Parallel, delayed
 from tqdm import tqdm
 from src.preprocessing.download.download_s1_s2_utils import download_s1_s2
+from omegaconf import OmegaConf
+import numpy as np
 
-@hydra.main(version_base=None, config_path="../../../configs/preprocessing/download", config_name="dwd_gdf_lidarhd_timeseries")
-# @retry(exceptions=Exception, delay=10, tries=100)
+@hydra.main(version_base=None, config_path="../../../configs/preprocessing/download", config_name="dwd_gdf_height_map_timeseries")
+@retry(exceptions=Exception, delay=10, tries=100)
 def main(cfg: DictConfig) -> None:    
+
+    print(OmegaConf.to_yaml(cfg, resolve=True))
 
     gdf_path = Path(cfg.gdf_path).resolve()
     data_dir = Path(cfg.data_dir).resolve()
@@ -28,6 +31,8 @@ def main(cfg: DictConfig) -> None:
     # To simplify the download process and reduce the number of images, 
     # each date is rounded to the 15th day of its respective month.
     initial_gdf["grouping_dates"] = initial_gdf[cfg.grouping_dates].astype(str).str[:6] + "15"
+
+    # initial_gdf["grouping_dates"] = initial_gdf[cfg.grouping_dates]
     
     # Group the geometries by the grouping dates
     grouped_by_df = (
@@ -42,24 +47,17 @@ def main(cfg: DictConfig) -> None:
     grouped_gdf_path = data_dir / grouped_gdf_filename
     grouped_gdf.to_file(grouped_gdf_path, driver="GeoJSON")
 
-    # Parallelisation 
     total_rows = len(grouped_gdf)
-    logging.info("Starting parallel download.")
-    Parallel(n_jobs=cfg.n_jobs_parrallelized)(
-        delayed(process_geometry)(row_gdf, cfg)
-        for _, row_gdf in tqdm(grouped_gdf.iterrows(), total=total_rows, desc="Downloading data")
-    )
+    logging.info("Starting sequential download.")
+    for i, row_gdf in tqdm(grouped_gdf.iterrows(), total=total_rows, desc="Downloading data"):
+        process_geometry(row_gdf, cfg, i, total_rows)
     logging.info("Download process completed.")
 
 
-def process_geometry(row_gdf, cfg):
+def process_geometry(row_gdf, cfg, i, total_rows):
     if isinstance(cfg.gee_project, str):
         cfg.gee_project = [cfg.gee_project]
 
-    """Process a single geometry row and perform the download."""
-    for project in list(cfg.gee_project):
-        geefetch.utils.gee.auth(project)
-    
     date = row_gdf["grouping_dates"]
     geometry = row_gdf["geometry"]
     
@@ -69,8 +67,38 @@ def process_geometry(row_gdf, cfg):
     else :
         polygons = [geometry]
 
-    for polygon in tqdm(polygons, desc =f"Download polygons associated with lidar_{date}",total=len(polygons)) :
-        bounds = polygon.bounds
+    # Checkpoint to avoid downloading data that has already been downloaded
+    ckpt_path = Path(cfg.data_dir).resolve() / "ckpt" / f"lidar_{date}.npy"
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    if cfg.start_from_scratch:
+        ckpt_path.unlink(missing_ok=True)
+    
+    # Initialize ckpt
+    if ckpt_path.exists():
+        ckpt = np.load(ckpt_path)
+    else:
+        ckpt = np.empty((0, 5), dtype=np.float64)
+        np.save(ckpt_path, ckpt)
+    
+    logging.info(f"########## date: {date}, {i}/{total_rows}")
+
+    # Download data for each polygon
+    for polygon in tqdm(polygons, total=len(polygons), desc=f"Downloading polygons associated with lidar_{date}, {i}/{total_rows}") :
+        bounds = polygon.bounds # (minx, miny, maxx, maxy)
+
+        # Create current entry
+        current_entry = np.array(list(bounds) + [float(date)], dtype=np.float64)
+        
+        # Check if already processed
+        is_processed = False
+        if ckpt.shape[0] > 0:
+            # Exact match check
+            is_processed = np.any(np.all(ckpt == current_entry, axis=1))
+            if is_processed:
+                logging.info(f"Polygon {bounds} with date {date} already downloaded (skipping)")
+                continue
+            
+        # Download data if not already processed
         download_s1_s2(
             data_dir=Path(cfg.data_dir).resolve(),
             ee_project_ids=list(cfg.gee_project),
@@ -88,7 +116,11 @@ def process_geometry(row_gdf, cfg):
             s1_orbit=cfg.s1_orbit
         )
 
-        
+        # Update checkpoint
+        # Reload to handle parallel updates (simple file lock mechanism would be better but this is rudimentary)
+        ckpt = np.load(ckpt_path)
+        ckpt = np.vstack([ckpt, current_entry])
+        np.save(ckpt_path, ckpt)
 
 if __name__ == "__main__":
     main()

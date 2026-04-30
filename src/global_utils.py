@@ -5,7 +5,6 @@ from affine import Affine
 from rasterio.enums import Resampling
 from rasterio.windows import from_bounds
 import numpy as np
-import lightning as L
 import rich.syntax
 import rich.tree
 from omegaconf import DictConfig, OmegaConf
@@ -14,7 +13,11 @@ from skimage.measure import block_reduce
 from math import gcd
 import geopandas as gpd
 import pooch
-import json
+from tqdm import tqdm
+from shapely.geometry import box
+import warnings
+
+logger = logging.getLogger(__name__)
 
 def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
     """Initializes multi-GPU-friendly python logger."""
@@ -145,6 +148,9 @@ def get_window(
 
         # come back of the case not supported by rasterio
         if resolution is not None and resolution != init_resolution and resampling_method not in {"bilinear", "cubic", "cubic_spline", "lanczos", "nearest"} :
+            if resampling_method is None:
+                resampling_method = "max"
+            
             # We assume the resolutions are in meters and with a precision of 1 decimeter (e.g., 1.5m). 
             # we also assume that the real height is divisible by the resolution.
             # We compute the greatest common divisor (GCD) of the two resolutions.            
@@ -160,11 +166,16 @@ def get_window(
             tmp_width = int(round(real_width/resolution))*div_factor
             data = data[...,:tmp_height,:tmp_width] 
             
-            if "nan" in resampling_method:
+            if (
+                not resampling_method.startswith("nan")
+                and resampling_method in {"mean", "max", "min", "median"}
+            ):
                 resampling_method = "nan" + resampling_method
 
             # We reduce in block pixel to reach the target resolution
-            data = block_reduce(data, block_size=(1, div_factor, div_factor), cval=np.nan, func=getattr(np, resampling_method))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                data = block_reduce(data, block_size=(1, div_factor, div_factor), cval=np.nan, func=getattr(np, resampling_method))
 
         count = data.shape[0] if len(data.shape) == 3 else 1
         height = data.shape[-2]
@@ -183,6 +194,110 @@ def get_window(
         )
     return data, profile
  
+
+def get_grid(global_bounds, patch_size, margin_size, resolution):
+    """
+    Get the bounds of all subpatches for a given global bounds (include margin).
+
+    Args:
+        global_bounds (tuple): (min_x, min_y, max_x, max_y) of the area.
+        patch_size (int or float): Size of each patch (in the same units as bounds).
+        margin_size (int or float): Margin to add around the area (in the same units as bounds).
+        resolution (int or float): Step size for alignment (in the same units as bounds).
+
+    Returns:
+        list of tuple: List of (min_x, min_y, max_x, max_y) for each patch.
+    """
+    patch_bounds = []
+
+    # We set 3 times the margin size: two for the edges to reduce border effects, 
+    # and a third to create an overlap between neighbouring patches. 
+    # This allows the values to be averaged over the overlap area, thus reducing discontinuities between patches.
+    border_margin_size = int(np.ceil(1.5 * margin_size))
+    border_margin_size = (border_margin_size//resolution + 1) * resolution # we add the remainder to the border margin size to ensure that the patches are aligned to the resolution
+    assert patch_size % resolution == 0, f"The patch size must be divisible by the resolution: {patch_size} % {resolution} != 0"
+
+    min_x = global_bounds[0] - border_margin_size
+    min_y = global_bounds[1] - border_margin_size
+    max_x = global_bounds[2] + border_margin_size
+    max_y = global_bounds[3] + border_margin_size
+
+    max_x = max(min_x + patch_size, max_x)
+    max_y = max(min_y + patch_size, max_y)
+
+    x_start = min_x
+    while x_start < max_x:
+        y_start = min_y
+        while y_start < max_y - 2*border_margin_size:
+            # We compute the bounds of the current patch
+            x_stop = x_start + patch_size
+            y_stop = y_start + patch_size
+
+
+            # We ensure that the last patches are within the global bounds and keep the same size as the other patches.
+            x_start = min(x_start, max_x - patch_size)
+            y_start = min(y_start, max_y - patch_size)
+            x_stop = min(x_stop, max_x)
+            y_stop = min(y_stop, max_y)
+            
+            # Save patch bounds
+            patch_bounds.append((x_start, y_start, x_stop, y_stop))
+
+            # Move y_start for next patch, with overlap and alignment to resolution
+            if y_stop < max_y :
+                y_start = y_stop - 2*border_margin_size
+            else:
+                break  # End of y loop
+
+        # Move x_start for next patch, with overlap and alignment to resolution
+        if x_stop < max_x :
+            x_start = x_stop - 2*border_margin_size
+        else:
+            break  # End of x loop
+
+    return patch_bounds
+
+def subdivide_bounds_gdf(gdf, patch_size, margin_size, resolution) :
+    """
+    
+    """
+    new_gdf = []
+    for idx, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Subdividing gdf"):
+        bounds = row['geometry'].bounds
+        list_bounds = get_grid( global_bounds=bounds, patch_size=patch_size, margin_size=margin_size, resolution=resolution)
+        global_bounds = (
+            min([sub_bounds[0] for sub_bounds in list_bounds]),
+            min([sub_bounds[1] for sub_bounds in list_bounds]),
+            max([sub_bounds[2] for sub_bounds in list_bounds]),
+            max([sub_bounds[3] for sub_bounds in list_bounds]),
+        )
+        for sub_bounds in list_bounds :
+            new_row = row.copy()
+            new_row["geometry"] = box(*sub_bounds)
+            new_row["patch_bounds"] = global_bounds
+            new_gdf.append(new_row)
+    return gpd.GeoDataFrame(new_gdf, crs=gdf.crs).reset_index()
+
+def expand_bounds_gdf(gdf, margin_size, resolution) :
+    """
+    Expand the bounds of the gdf to include all the subpatches.
+    """
+    new_gdf = []
+
+    border_margin_size = int(np.ceil(1.5 * margin_size))
+    border_margin_size = (border_margin_size//resolution + 1) * resolution # we add the remainder to the border margin size to ensure that the patches are aligned to the resolution
+    for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Expanding bounds gdf"):
+        bounds = row['geometry'].bounds
+        bounds = (
+            bounds[0] - border_margin_size,
+            bounds[1] - border_margin_size,
+            bounds[2] + border_margin_size,
+            bounds[3] + border_margin_size,
+        )
+        new_row = row.copy()
+        new_row["geometry"] = box(*bounds)
+        new_gdf.append(new_row)
+    return gpd.GeoDataFrame(new_gdf, crs=gdf.crs).reset_index()
 
 class DiffGdfAdapter   :
     def __init__(self, country="France", min_images=1, date_columns=["date"]):

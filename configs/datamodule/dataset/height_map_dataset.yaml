@@ -3,6 +3,8 @@ defaults :
   - get_targets : lidar
 
 gdf_path: ${data_dir}/sentinel/timeseries/lidarhd/gdf_height_map_timeseries.geojson
+save_dir: ${data_dir}/saved_tensors/timeseries/lidarhd/${run_name}/${run_version}/
+batch_size_save: 8 # Taille des chunks safetensors
 resolution_input: 10
 resolution_target: 2.5
 patch_size_input: 64
@@ -15,9 +17,12 @@ train_dataset:
   patch_size_input: ${datamodule.dataset.patch_size_input}
   patch_size_target: ${datamodule.dataset.patch_size_target}
   gdf_path: ${datamodule.dataset.gdf_path}
-  data_augmentation : False
+  data_augmentation : True
   get_inputs :  ${datamodule.dataset.get_inputs}
   get_targets : ${datamodule.dataset.get_targets}
+  save_dir: ${datamodule.dataset.save_dir}/train
+  batch_size_save: ${datamodule.dataset.batch_size_save}
+  mode: ${datamodule.instance.mode}
   stage: train
 
 val_dataset:
@@ -30,6 +35,9 @@ val_dataset:
   data_augmentation : False
   get_inputs :  ${datamodule.dataset.get_inputs}
   get_targets : ${datamodule.dataset.get_targets}
+  save_dir: ${datamodule.dataset.save_dir}/val
+  batch_size_save: ${datamodule.dataset.batch_size_save}
+  mode: ${datamodule.instance.mode}
   stage: val
 
 test_dataset:
@@ -42,6 +50,9 @@ test_dataset:
   data_augmentation : False
   get_inputs :  ${datamodule.dataset.get_inputs}
   get_targets : ${datamodule.dataset.get_targets}
+  save_dir: ${datamodule.dataset.save_dir}/test
+  batch_size_save: ${datamodule.dataset.batch_size_save}
+  mode: ${datamodule.instance.mode}
   stage: test
 
 predict_dataset:
@@ -55,5 +66,8 @@ predict_dataset:
   get_inputs :  ${datamodule.dataset.get_inputs}
   get_targets : 
     _target_: src.datamodule.dataset.get_targets.nan.getNan
-  stage: predict
+  batch_size_save: ${datamodule.dataset.batch_size_save}
+  mode: ${datamodule.instance.mode}
+  save_dir: ${datamodule.dataset.save_dir}/${datamodule.dataset.predict_dataset.stage}
+  stage: predict_test_subdivide
   

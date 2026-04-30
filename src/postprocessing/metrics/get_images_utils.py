@@ -1,4 +1,3 @@
-from tkinter import W
 import geopandas as gpd
 import numpy as np
 import rasterio
@@ -9,6 +8,7 @@ from shapely.geometry import shape
 from shapely.geometry import box
 from rasterio.features import rasterize
 from pathlib import Path
+from datetime import datetime
 
 class get_images:
     def __init__(self, image_loaded_set, image_computed_set) :
@@ -19,23 +19,35 @@ class get_images:
         bounds = row["geometry"].bounds
 
         res_images = {}
-        res_profiles = {}
 
         #Retrieving images to be loaded 
         for name_image, image_loader in self.image_loaded_set.items() :
-            image, profile = image_loader.load_image(bounds, row)
-            res_images[name_image] = image 
-            res_profiles[name_image] = profile
+            if image_loader is not None:
+                image = image_loader.load_image(bounds, row)
+                res_images[name_image] = image 
 
         #Retrieving images to be calculated if they are not None
         if self.image_computed_set is not None:         
             for name_image, image_computer in self.image_computed_set.items() :
-                image, profile = image_computer.compute_image(res_images, res_profiles)
-                res_profiles[name_image] = profile
-                res_images[name_image] = image
+                if image_computer is not None:
+                    images_value = image_computer.compute_image(res_images, row)
+                    if isinstance(images_value, dict):
+                        for key, value in images_value.items():
+                            res_images[f"{name_image}_{key}"] = value
+                    else:
+                        res_images[name_image] = images_value
 
         return res_images
 
+def get_delta_date(date_ref, date_vrt):
+    """
+    Retourne le nombre de jours entre deux dates (YYYYMMDD ou YYYY-MM-DD).
+    """
+    date_vrt = Path(date_vrt).stem
+    date_ref = datetime.strptime(date_ref, "%Y%m%d")
+    date_vrt = datetime.strptime(date_vrt, "%Y%m%d")
+    delta = abs((date_vrt - date_ref).days)
+    return delta
 
 class input_image_loader :
     def __init__(self, path, resolution, resampling_method, open_even_oob, channel_to_keep, grouping_dates):
@@ -59,16 +71,21 @@ class input_image_loader :
 
             else:
                 path = self.path
-            
+        else:
+            path = self.path
+
         if Path(path).is_dir():
             paths = list(Path(path).iterdir())
         else:
             paths = [path]
 
         images_input = []
-        profiles_input = []
         for path in paths:
-            image, profile = get_window(
+
+            if self.grouping_dates and get_delta_date(date, path) > 60:
+                continue
+            
+            image, _ = get_window(
                 path,
                 bounds=bounds,
                 resolution=self.resolution,
@@ -78,10 +95,8 @@ class input_image_loader :
 
             if image is not None and np.isfinite(image).any():   
                 images_input.append(image)
-                profiles_input.append(profile)
             
         image = np.median(images_input, axis=0)
-        profile = profiles_input[0]
 
         if self.channel_to_keep is not None:
             image = image[self.channel_to_keep, ...]
@@ -92,7 +107,7 @@ class input_image_loader :
         image_max = np.nanmax(image)
         image = (image - image_min) / (image_max - image_min)
 
-        return image, profile
+        return image
 
 
 class output_image_loader :
@@ -125,6 +140,8 @@ class output_image_loader :
             path = path.replace("<year>", date[:4])
         if "<date>" in self.path :
             path = path.replace("<date>", date)
+        if "<area>" in self.path :
+            path = path.replace("<area>", row["area_name"])
 
         image, profile = get_window(
             path,
@@ -133,10 +150,12 @@ class output_image_loader :
             resampling_method=self.resampling_method,
             open_even_oob=self.open_even_oob
             )
+        if image is None:
+            print(f"Image is None for path {path}")
+            print(f"Bounds: {bounds}")
         image = image.astype(np.float32)*self.scaling_factor
         image = np.clip(image, self.min_image, self.max_image).squeeze()
-
-        return image, profile
+        return image
 
 
 class mask_image_loader :
@@ -183,7 +202,7 @@ class mask_image_loader :
             mask_forest = np.zeros_like(classif_mask, dtype=bool)
         
         final_mask = classif_mask | mask_forest
-        return final_mask, None
+        return final_mask
 
 
 class masked_image_computer :
@@ -191,7 +210,7 @@ class masked_image_computer :
         self.input_name = input_name
         self.mask_name = mask_name
 
-    def compute_image(self, res_images, res_profiles):
+    def compute_image(self, res_images, row):
         if self.input_name not in res_images:
             Exception(f"You must first load {self.input_name}")
             
@@ -199,23 +218,38 @@ class masked_image_computer :
         mask = res_images[self.mask_name].copy()
 
         image[~mask] = np.nan
-        return image, None
+        return image
 
 
 class difference_computer :
-    def __init__(self, input_name_1, input_name_2, min_image, max_image):
+    def __init__(self, input_name_1, input_name_2, min_height, max_height, min_difference, max_difference, threshold_forest):
         self.input_name_1 = input_name_1
         self.input_name_2 = input_name_2
-        self.min_image = int(min_image) if min_image is not None else None
-        self.max_image = int(max_image) if max_image is not None else None
+        self.max_height = max_height
+        self.min_height = min_height
+        self.min_difference = int(min_difference) if min_difference is not None else None
+        self.max_difference = int(max_difference) if max_difference is not None else None
+        self.threshold_forest = threshold_forest
 
-    def compute_image(self, res_images, res_profiles):
+    def compute_image(self, res_images, row):
         if self.input_name_1 not in res_images or  self.input_name_2 not in res_images :
             Exception(f"You must first load {self.input_name_1} and {self.input_name_2}")
         
-        profile = res_profiles[self.input_name_1]
         image_1 = res_images[self.input_name_1].copy()
         image_2 = res_images[self.input_name_2].copy()
+
         difference = image_2 - image_1
-        difference = np.clip(difference, self.min_image, self.max_image).astype(np.float32)
-        return difference, profile
+
+        if self.max_height is not None and self.min_height is not None:
+            range_mask = (image_1 >= self.min_height) & (image_2 >= self.min_height) & (image_1 <= self.max_height) & (image_2 <= self.max_height)
+            difference[~range_mask] = np.nan
+
+        if self.threshold_forest is not None:
+            non_forest_mask = (image_1 < self.threshold_forest) & (image_2 < self.threshold_forest)
+            difference[non_forest_mask & np.isfinite(difference)] = 0
+        
+        # Mask the difference outside the range of valid differences
+        mask_diff_range = (difference < self.min_difference) | (difference > self.max_difference)
+        difference[mask_diff_range] = np.nan
+        return difference
+  

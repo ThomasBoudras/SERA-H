@@ -1,0 +1,127 @@
+model : h-figure_curve_mae_by_nb_image
+min_height : 0
+max_height : 50
+resolution : 2.5
+real_patch_size_plot : 500
+nb_jobs : 10
+seed : 12345
+print_config : True
+resampling_method_pred : max
+n_samples: null
+
+data_dir : data/
+save_dir : ${data_dir}/logs/metrics/height_map/${model}
+output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
+grouping_dates : lidar_acquisition_date
+version_prediction : test_lidarhd
+version_metrics : test_lidarhd
+
+geometries_path : ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir : hydra_logs
+
+get_images : 
+  _target_ : src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:    
+    height_target : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      resolution: ${resolution}
+      resampling_method: ${resampling_method_pred}
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    vegetation_mask :
+      _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
+      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      resolution: ${resolution}
+      classes_to_keep: [5]
+      grouping_dates: ${grouping_dates}
+      
+  image_computed_set:
+    masked_height_target :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_target
+      mask_name: vegetation_mask
+
+    masked_height_pred :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred
+      mask_name: vegetation_mask
+
+get_metrics_local : 
+  _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set :
+    bins_nb_image_error :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_nb_image_local_computer
+      name_pred : masked_height_pred
+      name_target : masked_height_target
+      bins_nb_image : [[4,5], [6,7], [8,9], [10,11], [12,13], [14,15], [16,17], [18,19], [20,21], [22,23], [24,25]]
+      vrts_column : valid_vrts
+      method_metrics : error
+
+get_metrics_global : 
+  _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_print : ["bins_nb_image_mean_error"]
+  metrics_set :
+    bins_nb_image_tuples_error :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : bins_nb_image_error
+
+    bins_nb_image_mean_error :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.mean_tuples_global_computer
+      name_metric : bins_nb_image_error
+
+get_plots_local: null
+
+get_plots_global: 
+  _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
+  save_dir : ${save_dir}/${version_metrics}_figures
+  model_name : ${model}
+  plot_set :
+    curve_mae_nb_image:
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 1
+      nb_col : 1
+      size_plot_width: 13
+      size_plot_height: 7
+      graph_list :
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 0
+          idx_col : 0
+          graph_title : null
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_mae_curve_by_bins
+            metrics_list: [bins_nb_image_tuples_error]
+            proportion_metric: bins_nb_image_tuples_error
+            legend_labels: null
+            bins : ["4-5", "6-7", "8-9", "10-11", "12-13", "14-15", "16-17", "18-19", "20-21", "22-23", "24-25"]
+            x_label : "Number of Initial Triplets Images"
+            y_label : "MAE (m)"
+            colors: ["#ffb854"]
+            y_min: 1
+            y_max: 4
+            legends_and_labels_shown: True

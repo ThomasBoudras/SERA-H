@@ -1,0 +1,615 @@
+# @package _global_
+
+model: h-figure_qualitative
+min_height: 0
+max_height: 40
+resolution: 2.5
+nb_jobs: 1
+seed: 12345
+print_config: True
+nb_plots: 4
+n_samples: 4
+version_prediction: test_lidarhd
+version_metrics: test_lidarhd
+
+resampling_method_liu: bilinear
+
+data_dir: data/
+save_dir: ${data_dir}/logs/metrics/height_map/${model}
+output_path_xlsx: ${save_dir}/metrics_${model}.xlsx
+grouping_dates: lidar_acquisition_date
+
+geometries_path: ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir: hydra_logs
+
+get_images:
+  _target_: src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:
+    spot_rgb:
+      _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
+      path: ${data_dir}/open_canopy/<year>/spot.vrt
+      resolution: 1.5
+      resampling_method: bilinear
+      open_even_oob: True
+      channel_to_keep: [0, 1, 2]
+      grouping_dates: ${grouping_dates}
+
+    sentinel_rgb:
+      _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
+      path: ${data_dir}/sentinel/composites/lidarhd/s2/s2.vrt
+      resolution: 10
+      resampling_method: bilinear
+      open_even_oob: True
+      channel_to_keep: [2, 1, 0]
+      grouping_dates: ${grouping_dates}
+
+    height_target : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_pauls : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/paul2025/<year>/paul2025/full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: 20221231
+      min_date: 20210101
+      grouping_dates: ${grouping_dates}
+
+    height_pred_schwartz : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/schwartz2025/<year>/full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_fogel : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/fogel2025/<year>/pred.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_liu : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/liu2023/liu2023/full.vrt
+      resolution: ${resolution}
+      resampling_method: ${resampling_method_liu}
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_sera : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+  image_computed_set: null
+
+get_metrics_local: null
+get_metrics_global: null
+
+get_plots_local:
+  _target_: src.postprocessing.metrics.get_plots_local_utils.get_plots_local
+  save_dir: ${save_dir}/${version_metrics}_figures
+  nb_plots: ${nb_plots}
+  model_name: ${model}
+  plot_set:
+    qualitative_figure_250m:
+      _target_: src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 1
+      nb_col: 8
+      size_plot_width: 24
+      size_plot_height: 3
+      wspace: 0.03
+      hspace: 0.03
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: spot_rgb
+            real_patch_size: 250
+            resolution: 1.5
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: sentinel_rgb
+            real_patch_size: 250
+            resolution: 10
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 2
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_target
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 3
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 4
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_fogel
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 5
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_liu
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 6
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_pauls
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 7
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_schwartz
+            real_patch_size: 250
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+    qualitative_figure_500m:
+      _target_: src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 1
+      nb_col: 8
+      size_plot_width: 24
+      size_plot_height: 3
+      wspace: 0.03
+      hspace: 0.03
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: spot_rgb
+            real_patch_size: 500
+            resolution: 1.5
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: sentinel_rgb
+            real_patch_size: 500
+            resolution: 10
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 2
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_target
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 3
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 4
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_fogel
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 5
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_liu
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 6
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_pauls
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 7
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_schwartz
+            real_patch_size: 500
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+    qualitative_figure_750m:
+      _target_: src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 1
+      nb_col: 8
+      size_plot_width: 24
+      size_plot_height: 3
+      wspace: 0.03
+      hspace: 0.03
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: spot_rgb
+            real_patch_size: 750
+            resolution: 1.5
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: sentinel_rgb
+            real_patch_size: 750
+            resolution: 10
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 2
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_target
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 3
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 4
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_fogel
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 5
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_liu
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 6
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_pauls
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 7
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_schwartz
+            real_patch_size: 750
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+    qualitative_figure_1000m:
+      _target_: src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 1
+      nb_col: 8
+      size_plot_width: 24
+      size_plot_height: 3
+      wspace: 0.03
+      hspace: 0.03
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: spot_rgb
+            real_patch_size: 1000
+            resolution: 1.5
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: sentinel_rgb
+            real_patch_size: 1000
+            resolution: 10
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 2
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_target
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 3
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 4
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_fogel
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 5
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_liu
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 6
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_pauls
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 7
+          graph_title: null
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_schwartz
+            real_patch_size: 1000
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+
+get_plots_global: null

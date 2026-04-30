@@ -7,24 +7,20 @@ defaults:
 project : "pred_sera"
 run_version: test_lidarhd
 
-ckpt_path : ${data_dir}/logs/train_sera/${run_name}/v1_${run_name}/best_checkpoints/epoch_026.ckpt
+ckpt_path : ${data_dir}/logs/train_sera/${run_name}/vx_${run_name}/best_checkpoints/epoch_xxx.ckpt
 load_just_weights: True
 
 save_dir: ${log_dir}/predictions
-
-via_bounds : null
-via_geojson :
-  path : ${data_dir}/sentinel/composites/lidarhd/gdf_height_map_composites.geojson
-  split: test
 
 datamodule:
   dataset:
     predict_dataset: 
       get_inputs: 
         open_even_oob: True
+      stage: predict_test_subdivide
 
 
-model:
+module:
   instance:
     train_metrics: null
     val_metrics: null 

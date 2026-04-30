@@ -1,0 +1,19 @@
+defaults:
+    - h-individual_metrics_defaults
+
+model : h-fogel2025
+
+get_images : 
+  image_loaded_set:
+    height_pred : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/fogel2025/<year>/pred.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}

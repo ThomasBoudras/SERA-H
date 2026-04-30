@@ -68,29 +68,29 @@ class Module(LightningModule):
         
         return {"optimizer": optimizer}
 
-    def forward(self, x: torch.Tensor, meta_data):
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor, metadata: dict):
         """
         Forward pass of the model.
 
         Args:
-            x (torch.Tensor): Input tensor containing satellite time series.
-                              Shape: (Batch, Time, Channels, Height, Width)
-            meta_data (dict): Metadata associated with the input images (e.g., acquisition dates).
+            inputs (torch.Tensor): Input tensor(s), typically satellite time series or images.
+            targets (torch.Tensor): Target tensors (e.g., ground truth height maps), may be required by some models.
+            metadata (dict): Metadata associated with inputs (e.g., acquisition dates, auxiliary info).
 
         Returns:
-            torch.Tensor: Predicted canopy height map.
-                          Shape: (Batch, 1, Height_HR, Width_HR)
+            torch.Tensor: Predicted outputs (e.g., canopy height map or super-resolved image).
         """
+   
         if self.super_resolution_model is not None :
-            x = self.super_resolution_model(x, meta_data)
-        preds = self.regression_model(x, meta_data)
+            inputs = self.super_resolution_model(inputs, targets, metadata)
+        preds = self.regression_model(inputs, targets, metadata)
         return preds
 
     def step(self, batch: Any, stage, metrics_function):
-        inputs, targets, meta_data = batch
-        preds = self.forward(inputs, meta_data)
+        inputs, targets, metadata = batch
+        preds = self.forward(inputs, targets, metadata)
         
-        loss = self.loss(preds, targets)
+        loss = self.loss(preds, targets, metadata)
 
         self.log(
             name= f"{stage}/loss",
@@ -102,7 +102,7 @@ class Module(LightningModule):
         )
     
         if metrics_function :
-            metrics_function.update(preds, targets, meta_data)
+            metrics_function.update(preds, targets, metadata)
         return loss, preds, targets
     
 
@@ -169,8 +169,8 @@ class Module(LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # At predict time, there are (normally) only inputs, no targets
-        inputs, _, meta_data = batch
-        preds = self(inputs, meta_data)
+        inputs, targets, metadata = batch
+        preds = self(inputs, targets, metadata)
 
         crop_size = int(preds.shape[-1]/12) 
         preds[...,:crop_size, :] = torch.nan 
@@ -178,8 +178,8 @@ class Module(LightningModule):
         preds[...,:, :crop_size] = torch.nan  
         preds[...,:, -crop_size:] = torch.nan  
         
-        bounds = meta_data["bounds"]
-        
+        bounds = metadata["bounds"]
+
         if self.predictions_save_dir is not None:
             (self.predictions_save_dir / f"rank_{self.global_rank}" / "preds").mkdir(parents=True, exist_ok=True)
             (self.predictions_save_dir / f"rank_{self.global_rank}" / "bounds").mkdir(parents=True, exist_ok=True)

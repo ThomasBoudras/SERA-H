@@ -6,8 +6,8 @@ defaults:
 
 project: "train_sera"
 run_name: h-utae_as
-run_version: v1_${run_name}
-data_dir: data
+run_version: vx_${run_name}
+data_dir: data/
 ckpt_path: last
 
 module:
@@ -20,12 +20,10 @@ module:
 datamodule:
     instance:
         batch_size: 8
-        
     dataset:
-        patch_size_input: 32
+        patch_size_input: 128
         patch_size_target: 128
         resolution_input: 2.5
-        patch_size_input: 128
         get_targets:
             targets_path: ${data_dir}/open_canopy/
 

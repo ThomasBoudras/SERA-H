@@ -14,6 +14,7 @@ grouping_dates_column: lidar_acquisition_date
 validation_column: valid_vrts
 gdf_clean_path: ${data_dir}/gdf_height_map_composites.geojson
 gdf_unclean_path: ${data_dir}/gdf_height_map_composites_unsaved.geojson
+half_window_size: 60
 
 hydra:
   run :

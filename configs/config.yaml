@@ -5,12 +5,13 @@ defaults:
     - trainer: default.yaml
     - module: module.yaml
     - datamodule: datamodule.yaml
-    - callbacks: tensorboard.yaml 
+    - callbacks: log_image.yaml 
     - logger: tensorboard.yaml 
     - hydra: default.yaml
 
     - train: null
     - predict: null
+    - test : null
 
 
 
@@ -27,3 +28,4 @@ log_dir: ${data_dir}/logs/${project}/${run_name}/${run_version}
 
 ckpt_path: null
 load_just_weights: False
+only_test: False

@@ -14,7 +14,7 @@ from src.module.regression_model.components.utae_utils import DownConvBlock, UpC
 class UTAE(nn.Module):
     def __init__(
         self,
-        input_dim,
+        inputs_dim,
         encoder_widths,
         decoder_widths,
         out_conv,
@@ -33,7 +33,7 @@ class UTAE(nn.Module):
         """
         U-TAE architecture for spatio-temporal encoding of satellite image time series.
         Args:
-            input_dim (int): Number of channels in the input images.
+            inputs_dim (int): Number of channels in the input images.
             encoder_widths (List[int]): List giving the number of channels of the successive encoder_widths of the convolutional encoder.
             This argument also defines the number of encoder_widths (i.e. the number of downsampling steps +1)
             in the architecture.
@@ -82,7 +82,7 @@ class UTAE(nn.Module):
             decoder_widths = encoder_widths
 
         self.in_conv = ConvBlock(
-            nkernels=[input_dim] + [encoder_widths[0], encoder_widths[0]],
+            nkernels=[inputs_dim] + [encoder_widths[0], encoder_widths[0]],
             pad_value=pad_value,
             norm=encoder_norm,
             padding_mode=padding_mode,
@@ -124,12 +124,12 @@ class UTAE(nn.Module):
         self.temporal_aggregator = Temporal_Aggregator(mode=agg_mode)
         self.out_conv = ConvBlock(nkernels=[decoder_widths[0]] + out_conv, padding_mode=padding_mode, last_relu=self.last_relue)
 
-    def forward(self, input, meta_data=None, return_att=False):
-        batch_positions = meta_data["inputs_dates"]
+    def forward(self, inputs, labels=None, metadata=None, return_att=False):
+        batch_positions = metadata["inputs_dates"]
         pad_mask = (
-            (input == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
+            (inputs == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
         )  # BxT pad mask
-        out = self.in_conv.smart_forward(input)
+        out = self.in_conv.smart_forward(inputs)
         feature_maps = [out]
         # SPATIAL ENCODER
         for i in range(self.n_stages - 1):

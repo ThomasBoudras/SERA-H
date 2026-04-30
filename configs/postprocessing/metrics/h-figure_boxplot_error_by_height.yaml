@@ -1,0 +1,289 @@
+# @package _global_
+model: h-figure_boxplot_error_by_height
+
+# General settings
+min_height: 0
+max_height: 50
+resolution: 2.5 
+nb_jobs: 10
+seed: 12345
+print_config: True
+n_samples: 5000
+
+# Paths and directories
+data_dir: data/
+save_dir: ${data_dir}/logs/metrics/height_map/${model}
+output_path_xlsx: ${save_dir}/metrics_${model}.xlsx
+grouping_dates: lidar_acquisition_date
+version_prediction: test_lidarhd
+version_metrics: test_lidarhd
+
+resampling_method_liu: bilinear
+
+# Geometries from a base run to ensure comparison on same areas
+geometries_path: ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir: hydra_logs
+
+# 1. Load ground truth and all prediction maps
+get_images: 
+  _target_: src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:    
+    height_target: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # Predictions to compare
+    pred_fogel2025: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/fogel2025/<year>/pred.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    pred_sera_h: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+      
+    pred_pauls2025: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/paul2025/<year>/paul2025/full.vrt
+      #_target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      #path: ${data_dir}/logs/pred_sera/${model}/${name_aoi}/predictions/data/preds/${model}_preds_full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: 20221231
+      min_date: 20210101
+      grouping_dates: ${grouping_dates}
+
+
+    pred_schwartz2025: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/schwartz2025/<year>/full.vrt
+      #_target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      #path: ${data_dir}/logs/pred_sera/${model}/${name_aoi}/predictions/data/preds/${model}_preds_full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    pred_liu2023:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/liu2023/liu2023/full.vrt
+      resolution: ${resolution}
+      resampling_method: ${resampling_method_liu}
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    pred_tolan2024:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/tolan2024/tolan2024/full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    vegetation_mask :
+      _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
+      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      resolution: ${resolution}
+      classes_to_keep: [5]
+      grouping_dates: ${grouping_dates}
+
+  image_computed_set:
+    masked_height_sera :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_sera_h
+      mask_name: vegetation_mask
+    
+    masked_height_pauls2025 :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_pauls2025
+      mask_name: vegetation_mask
+    
+    masked_height_schwartz2025 :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_schwartz2025
+      mask_name: vegetation_mask
+    
+    masked_height_fogel2025 :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_fogel2025
+      mask_name: vegetation_mask
+
+    masked_height_liu2023 :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_liu2023
+      mask_name: vegetation_mask
+
+    masked_height_tolan2024 :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_tolan2024
+      mask_name: vegetation_mask
+
+    masked_height_target :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_target
+      mask_name: vegetation_mask
+
+# 2. Compute local metrics (pemr patch/geometry) for each prediction
+get_metrics_local: 
+  _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set:
+    bins_error_fogel2025:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_fogel2025
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_sera_h:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_sera
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+      
+    bins_error_pauls2025:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_pauls2025
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_schwartz2025:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_schwartz2025
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_liu2023:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_liu2023
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_tolan2024:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_tolan2024
+      name_target: masked_height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+# 3. Aggregate local metrics into global metrics (lists of errors for boxplots)
+get_metrics_global: 
+  _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_print: [] # Don't print stats, just plot
+  metrics_set:
+    bins_tuples_error_fogel2025:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_fogel2025
+    bins_tuples_error_sera_h:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_sera_h
+    bins_tuples_error_pauls2025:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_pauls2025
+    bins_tuples_error_schwartz2025:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_schwartz2025
+
+    bins_tuples_error_liu2023:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_liu2023
+
+    bins_tuples_error_tolan2024:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_tolan2024
+
+get_plots_local: null
+
+# 4. Generate the final plot
+get_plots_global: 
+  _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
+  save_dir: ${save_dir}/${version_metrics}_figures
+  model_name: "error_distribution_comparison"
+  plot_set:
+    error_distribution_plot:
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 1
+      nb_col: 1
+      size_plot_width: 10
+      size_plot_height: 5.5
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null # The image doesn't have a title, only a figure caption
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_boxplot_by_bins
+            metrics_list: [
+              bins_tuples_error_sera_h,
+              bins_tuples_error_fogel2025,
+              bins_tuples_error_liu2023,
+              bins_tuples_error_tolan2024,
+              bins_tuples_error_pauls2025,
+              bins_tuples_error_schwartz2025,
+            ]
+            max_points_per_bin: null
+            # Use one of the metrics for proportion calculation, they should all be based on the same binned target data
+            proportion_metric: bins_tuples_error_sera_h 
+            legend_labels: ["SERA-H", "Fogel", "Liu", "Tolan", "Pauls", "Schwartz"]
+            bins: ["0-2m", "2-10m", "10-15m", "15-20m", "20-30m", "30-40m"]
+            x_label: "Ground truth height"
+            y_label: "Error (in m)"
+            colors: ["#FF5733", "#17BEBB", "#2E86C1", "#5666FF", "#7B42F6", "#B14ED3"] 
+            y_min: -25
+            y_max: 25
+            legends_and_labels_shown: True

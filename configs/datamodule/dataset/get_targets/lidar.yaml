@@ -3,5 +3,6 @@ targets_path: ${data_dir}/lidar/
 resolution_target: ${datamodule.dataset.resolution_target}
 replace_nan_by_zero_in_target: True
 date_column: lidar_acquisition_date
+area_column: null
 unit_column: lidar_unit
 resampling_method: max

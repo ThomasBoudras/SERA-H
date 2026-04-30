@@ -4,8 +4,8 @@ from datetime import datetime
 from pathlib import Path
 import json
 from src.global_utils  import get_window
-from src.datamodule.datamodule_utils import expand_gdf
 from src.global_utils import get_logger
+import random
 
 log = get_logger(__name__)
 
@@ -23,6 +23,7 @@ class getS1S2Timeseries :
         date_column,
         resampling_method,
         open_even_oob,
+        input_combination_mode,
     ):
         """
         nb_timeseries_image : Number of tuple (S2, S1 asc, S1 dsc)
@@ -40,6 +41,7 @@ class getS1S2Timeseries :
         self.open_even_oob = open_even_oob
         self.mean = None
         self.std = None
+        self.input_combination_mode = input_combination_mode
 
 
     def get_date(self, str_date) :
@@ -94,14 +96,30 @@ class getS1S2Timeseries :
     def __len__(self) :
         return len(self.gdf)
     
+    def get_input_combination_processing(self) :
+        if self.input_combination_mode == "s2_s1asc_s1dsc" :
+            return True, True, True
+        elif self.input_combination_mode == "s2":
+            return True, False, False
+        elif self.input_combination_mode == "s1asc_s1dsc" :
+            return False, True, True
+        elif self.input_combination_mode == "s2_s1rdm" :
+            heads_or_tails = random.choice([1, 2])
+            if heads_or_tails == 1 :
+                return True, True, False
+            else :
+                return True, False, True
+        else :
+            raise ValueError(f"Invalid input combination mode: {self.input_combination_mode}")
+
     def __call__(self, bounds, row, transform) :        
         vrts = row[self.vrts_column]
         lidar_date = row[self.date_column]
 
         file_lidar_date = lidar_date[:6] + "15" # files are stored with the date of the middle of the month
-        s2_vrts_path = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s2" / "s2_vrts"
-        s1_asc_vrts_path = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s1" / "s1_asc_vrts"
-        s1_dsc_vrts_path = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s1" / "s1_dsc_vrts"
+        s2_vrts_path = self.inputs_path / "s2" / "s2_vrts"
+        s1_asc_vrts_path = self.inputs_path / "s1" / "s1_asc_vrts"
+        s1_dsc_vrts_path = self.inputs_path / "s1" / "s1_dsc_vrts"
         
         vrts = self.get_n_closest_dates(vrts, lidar_date)
 
@@ -113,33 +131,47 @@ class getS1S2Timeseries :
             s1_asc_vrt = s1_asc_vrts_path / f"{s2_s1_vrt[1]}.vrt"
             s1_dsc_vrt = s1_dsc_vrts_path / f"{s2_s1_vrt[2]}.vrt"
 
-            s2_image, _ = get_window(
-                image_path=s2_vrt,
-                bounds=bounds,
-                resolution=self.resolution_input,
-                resampling_method = self.resampling_method,
-                open_even_oob = self.open_even_oob,
-            )
-            s1_asc_image, _ = get_window(
-                image_path=s1_asc_vrt,
-                bounds=bounds,
-                resolution=self.resolution_input,
-                resampling_method = self.resampling_method,
-                open_even_oob = self.open_even_oob,
-            )
-            s1_dsc_image, _ = get_window(
-                image_path=s1_dsc_vrt,
-                bounds=bounds,
-                resolution=self.resolution_input,
-                resampling_method = self.resampling_method,
-                open_even_oob = self.open_even_oob,
-            )
-            if s1_asc_image is None or s1_dsc_image is None or s2_image is None:
-                raise ValueError(f"bounds: {bounds}, s1_asc_image: {s1_asc_image}, s2_image: {s2_image}, s1_dsc_image: {s1_dsc_image}, file_lidar_date: {file_lidar_date}, s2_s1_vrt: {s2_s1_vrt}")
-            if len(s1_asc_image.shape) != len(s2_image.shape) or len(s1_dsc_image.shape) != len(s2_image.shape):
-                raise ValueError(f"bounds: {bounds}, s1_asc_image.shape: {s1_asc_image.shape}, s2_image.shape: {s2_image.shape}, s1_dsc_image.shape: {s1_dsc_image.shape}, file_lidar_date: {file_lidar_date}, s2_s1_vrt: {s2_s1_vrt}")
+            images = []
 
-            images = np.concatenate((s2_image, s1_asc_image, s1_dsc_image), axis=0)
+            get_s2_image, get_s1_asc_image, get_s1_dsc_image = self.get_input_combination_processing()
+
+            if get_s2_image:
+                s2_image, _ = get_window(
+                    image_path=s2_vrt,
+                    bounds=bounds,
+                    resolution=self.resolution_input,
+                    resampling_method = self.resampling_method,
+                    open_even_oob = self.open_even_oob,
+                )
+                images.append(s2_image)
+                if s2_image is None:
+                    raise ValueError(f"s2_image is None for bounds: {bounds}, file_lidar_date: {file_lidar_date}, s2_s1_vrt: {s2_s1_vrt}")
+            
+            if get_s1_asc_image:
+                s1_asc_image, _ = get_window(
+                    image_path=s1_asc_vrt,
+                    bounds=bounds,
+                    resolution=self.resolution_input,
+                    resampling_method = self.resampling_method,
+                    open_even_oob = self.open_even_oob,
+                )
+                images.append(s1_asc_image)
+                if s1_asc_image is None:
+                    raise ValueError(f"s1_asc_image is None for bounds: {bounds}, file_lidar_date: {file_lidar_date}, s2_s1_vrt: {s2_s1_vrt}")
+            
+            if get_s1_dsc_image:
+                s1_dsc_image, _ = get_window(
+                    image_path=s1_dsc_vrt,
+                    bounds=bounds,
+                    resolution=self.resolution_input,
+                    resampling_method = self.resampling_method,
+                    open_even_oob = self.open_even_oob,
+                )
+                images.append(s1_dsc_image)
+                if s1_dsc_image is None:
+                    raise ValueError(f"s1_dsc_image is None for bounds: {bounds}, file_lidar_date: {file_lidar_date}, s2_s1_vrt: {s2_s1_vrt}")
+            
+            images = np.concatenate(images, axis=0)
             images = images.astype(np.float32).transpose(1, 2, 0)
             images[~np.isfinite(images)] = 0
             
@@ -169,6 +201,7 @@ class getS1S2Timeseries :
         else : 
             inputs = torch.stack([torch.from_numpy(images) for images in inputs], dim=0)
 
-        metadata = {"inputs_dates": torch.tensor(inputs_dates), "nb_real_timeseries_images": torch.tensor(len(vrts))} 
+        metadata = {"inputs_dates": torch.tensor(inputs_dates), "nb_real_timeseries_images": torch.tensor([len(vrts)])} 
         return inputs, metadata
     
+

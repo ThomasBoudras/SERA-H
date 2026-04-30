@@ -21,14 +21,14 @@ High-resolution mapping of canopy height is essential for forest management and 
 
 Comparison of SERA-H with state-of-the-art methods:
 
-| Model | Input images | Reference images | MAE (m) | RMSE (m) | nMAE (%) | Tree cover IoU (%) |
+| Model | Input images | Reference CHM | MAE (m) | RMSE (m) | nMAE (%) | Tree Cover IoU (%) |
 |-------|--------------|------------------|---------|----------|----------|--------------------|
-| Pauls | S1-S2 (10m) | GEDI (10m) | 5.13 | 7.24 | 42.06% | 45.58% |
-| Schwartz | S1-S2 (10m) | GEDI (10m) | 4.47 | 6.17 | 45.96% | 35.12% |
-| Tolan | Maxar (1m) | ALS (1m) | 5.49 | 7.52 | 41.74% | 70.15% |
-| Liu | Planet (3m) | ALS (3m) | 4.40 | 6.20 | 37.44% | 78.42% |
-| Fogel | Spot 6-7 (1.5m) | ALS (1.5m) | 2.37 | 3.65 | 18.88% | 88.15% |
-| **SERA-H** | **S1-S2 (10m)** | **ALS (2.5m)** | **2.60** | **3.86** | **20.40%** | **87.25%** |
+| Pauls | S1-S2 (10m) | GEDI (10m) | 5.13 | 7.24 | 42.06 | 45.58 |
+| Schwartz | S1-S2 (10m) | GEDI (10m) | 4.47 | 6.17 | 45.96 | 35.12 |
+| Tolan | Maxar (1m) | ALS (1m) | 5.49 | 7.52 | 41.74 | 70.15 |
+| Liu | Planet (3m) | ALS (3m) | 4.40 | 6.20 | 37.44 | 78.42 |
+| Fogel | SPOT-6/7 (1.5m) | ALS (1.5m) | 2.37 | 3.65 | 18.88 | 88.15 |
+| **SERA-H** | **S1-S2 (10m)** | **ALS (2.5m)** | **2.60** | **3.86** | **20.40** | **87.25** |
 
 *Table 1: Performance comparison on the test area at 2.5m resolution.*
 
@@ -62,16 +62,17 @@ pip install -r requirements.txt
 To download the required time series data (Sentinel-1, Sentinel-2, etc.), run the following command:
 
 ```bash
-python -m src.preprocessing.download.download_s1_s2_via_gdf -cn=dwd_gdf_lidarhd_timeseries
+python -m src.preprocessing.download.download_s1_s2_via_gdf -cn=dwd_gdf_height_timeseries
 ```
 
 ### 2. Clean Sentinel Data
 
-Once you have downloaded the Sentinel-1 and Sentinel-2 data, process the raw files into a clean dataset for training with:
+Once you have downloaded the Sentinel-1 and Sentinel-2 data, process the raw files into a clean dataset for training. This step sets up Virtual Raster Tables (VRTs) for the downloaded images, records the valid triplets (Sentinel-2, Sentinel-1 ascending, Sentinel-1 descending) directly into a GeoJSON file, and filters out regions with missing Sentinel data to ensure that only valid geometries are kept for the next steps.
 
 ```bash
 python -m src.preprocessing.datasets.get_clean_dataset -cn=gcd_height_map_timeseries
 ```
+
 
 ### 3. Prepare Lidar (ALS) and Forest Mask Data
 
@@ -85,7 +86,15 @@ Place the downloaded `forest_mask.parquet` and canopy height (lidar) files in th
 data/open_canopy/
 ```
 
-### 4. Download Pre-trained Super-Resolution Model (EDSR)
+### 4. Dataset Preparation (Presave)
+
+To significantly speed up the training process, you need to pre-extract and save the dataset patches to disk. This preparation step iterates over the dataset and saves the processed tensors, avoiding on-the-fly raster reading during training.
+
+```bash
+python -m src.presave_dataset train=h-sera_h
+```
+
+### 5. Download Pre-trained Super-Resolution Model (EDSR)
 
 SERA-H uses EDSR as its super-resolution backbone. You need to download the pre-trained weights from the official repository:
 [https://github.com/sanghyun-son/EDSR-PyTorch](https://github.com/sanghyun-son/EDSR-PyTorch?tab=readme-ov-file)
@@ -136,6 +145,7 @@ python -m src.train train=h-sera_h_as_04img datamodule.batch_size=32
 To run inference on the entire test area, use:
 
 ```bash
+python -m src.presave_dataset predict=h-sera_h
 python -m src.predict predict=h-sera_h
 ```
 
@@ -155,17 +165,21 @@ SERA-H/
 │   ├── datamodule/
 │   ├── module/
 │   ├── train/
+│   ├── postprocessing/
+│   │   └── metrics/         # Configs for evaluation and figures (SOTA models, scatter plots, etc.)
 │   └── config.yaml          # Main config file
 ├── data/                    # Dataset location
 │   ├── logs/                # Training logs, checkpoints, predictions and metrics
 │   ├── sentinel/            # Downloaded Sentinel-1 & Sentinel-2 images
 │   ├── open_canopy/         # Reference Lidar and Forest Mask
+│   ├── sota/                # State-of-the-art predictions from literature (Liu, Fogel, Pauls, Schwartz, etc.)
 │   └── utils/               # Helper data (geojsons, etc.)
 ├── src/                     # Source code
 │   ├── datamodule/          # LightningDataModules
 │   ├── module/              # LightningModules (Model architecture)
 │   ├── train.py             # Main training script
-│   └── predict.py           # Inference script
+│   ├── predict.py           # Inference script
+│   └── postprocessing/      # Scripts for computing metrics and generating figures
 ├── requirements.txt         # Python dependencies
 └── setup.cfg                # Project metadata
 ```
@@ -175,10 +189,10 @@ SERA-H/
 If you find this code useful for your research, please cite our paper:
 
 ```bibtex
-@misc{boudras2025serahnativesentinelspatial,
+@misc{boudras2026serahnativesentinelspatial,
       title={SERA-H: Beyond Native Sentinel Spatial Limits for High-Resolution Canopy Height Mapping}, 
       author={Thomas Boudras and Martin Schwartz and Rasmus Fensholt and Martin Brandt and Ibrahim Fayad and Jean-Pierre Wigneron and Gabriel Belouze and Fajwel Fogel and Philippe Ciais},
-      year={2025},
+      year={2026},
       eprint={2512.18128},
       archivePrefix={arXiv},
       primaryClass={cs.CV},

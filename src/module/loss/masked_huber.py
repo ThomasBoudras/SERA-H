@@ -8,6 +8,6 @@ class MaskedHuber(nn.Module):
         self.reduction = reduction
         self.beta = beta
 
-    def forward(self, pred, target):
-        mask = ~torch.isnan(target)  # create a mask where target is not NaN
+    def forward(self, pred, target, metadata):
+        mask = ~torch.isnan(target) & ~torch.isnan(pred)  # create a mask where target and pred are not NaN
         return F.smooth_l1_loss(pred[mask], target[mask], reduction=self.reduction, beta=self.beta)

@@ -1,14 +1,10 @@
-model : h-liu2023
 min_height : 0
 max_height : 50
 resolution : 2.5
 real_patch_size_plot : 500
 nb_jobs : 10
-#chunk_size : 10
 seed : 12345
-date_column : lidar_acquisition_date
 print_config : True
-resampling_method_pred : bilinear
 nb_plots : 50
 
 data_dir : data/
@@ -17,7 +13,8 @@ output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
 grouping_dates : lidar_acquisition_date
 version_metrics : test_lidarhd
 
-geometries_path : ${data_dir}/logs/pred_sera/h-sera_h/test_lidarhd/predictions/predict_gdf.geojson
+geometries_path : ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+
 hydra:
   run:
     dir: ${save_dir}
@@ -28,8 +25,8 @@ get_images :
   image_loaded_set:
     sentinel_rgb :
       _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
-      path: ${data_dir}/sentinel/composites/lidarhd/lidar_date_<date>/s2/s2.vrt
-      resolution: null
+      path: ${data_dir}/sentinel/composites/lidarhd/s2/s2.vrt
+      resolution: null  
       resampling_method: bilinear
       open_even_oob: True
       channel_to_keep: [2,1,0]
@@ -43,19 +40,8 @@ get_images :
       open_even_oob: True
       channel_to_keep: [0,1,2]
       grouping_dates: ${grouping_dates}
-    
-    height_pred : 
-      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/liu2023/liu2023/full.vrt
-      resolution: ${resolution}
-      resampling_method: ${resampling_method_pred}
-      scaling_factor: 1
-      min_image: ${min_height}
-      max_image: ${max_height}
-      open_even_oob: False
-      max_date: null
-      min_date: null
-      grouping_dates: ${grouping_dates}
+      
+    height_pred : null
 
     height_target : 
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
@@ -77,7 +63,7 @@ get_images :
       resolution: ${resolution}
       classes_to_keep: [5]
       grouping_dates: ${grouping_dates}
-    
+      
   image_computed_set:
     masked_height_pred :
       _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
@@ -269,6 +255,5 @@ get_plots_local:
             font_size : 14
             table_width_scale : 0.7
             table_height_scale : 1.8
-
 
 get_plots_global: null

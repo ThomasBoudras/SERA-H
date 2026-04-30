@@ -18,7 +18,7 @@ from shapely.ops import unary_union
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry import box
 from joblib import Parallel, delayed
-from src.datamodule.datamodule_utils import expand_gdf
+from src.global_utils import subdivide_bounds_gdf
 import time
 
 log = utils.get_logger(__name__)
@@ -53,7 +53,6 @@ def predict(config: DictConfig) -> None:
     save_dir = Path(config.save_dir).resolve()
     save_dir_tmp = save_dir / "tmp"
     save_dir_data = save_dir / "data"
-    aoi_gdf_path = save_dir / "predict_gdf.geojson"
     grouped_aoi_gdf_path = save_dir / "grouped_aoi_gdf.geojson"
     
     # Create directories and files, just for the master process (to avoid race conditions)
@@ -67,60 +66,6 @@ def predict(config: DictConfig) -> None:
         # Create the subdirectories
         (save_dir_tmp / "patch_tifs").mkdir()
 
-        # Get the aoi from the config
-        if config.via_bounds is not None and config.via_geojson is None:
-            row = {name : data for name, data in config.via_bounds.items() if name!="bounds"}
-            bounds = config.via_bounds["bounds"]
-            bounds = bounds["left"], bounds["bottom"], bounds["right"], bounds["top"]
-            row["geometry"] = box(*bounds)
-            aoi_gdf = gpd.GeoDataFrame([row], crs="EPSG:2154")
-
-        elif config.via_geojson is not None and config.via_bounds is None :
-            aoi_gdf = gpd.read_file(config.via_geojson["path"])
-            if config.via_geojson.get("split", None) is not None:
-                aoi_gdf = aoi_gdf[aoi_gdf['split'] == config.via_geojson["split"]].reset_index(drop=True) 
-        else:
-            Exception("via_bounds and via_geojson : one of them must be provided and the other must be null")
-
-            
-        if config.get("adapt_gdf", None) is not None: 
-            adapt_gdf = hydra.utils.instantiate(config.adapt_gdf)
-            aoi_gdf = adapt_gdf(aoi_gdf)
-        
-        # Save the aoi to a geojson file for datamodule
-        aoi_gdf.to_file(
-                aoi_gdf_path,
-                driver="GeoJSON",
-            )
-
-        # Group geometries that are adjacent or touching each other
-        unioned = unary_union(aoi_gdf['geometry'])
-        if isinstance(unioned, MultiPolygon):
-            polygons = list(unioned.geoms)
-        elif isinstance(unioned, Polygon):
-            polygons = [unioned]
-        else:
-            polygons = []
-        grouped_aoi_gdf = gpd.GeoDataFrame({'geometry': polygons}, crs=aoi_gdf.crs)        
-
-        # Subdivide geometries into patches if patch_size_max is provided
-        if config.get("patch_size_max", None) is not None:
-            patch_size_max = config.patch_size_max
-            resolution = config.datamodule.dataset.resolution_input
-            
-            log.info(f"Subdividing geometries according to patch_size_max={patch_size_max}")
-            grouped_aoi_gdf = expand_gdf(grouped_aoi_gdf, patch_size=patch_size_max, margin_size=0, resolution=resolution)
-            # Ne garder que les géométries de grouped_aoi_gdf qui intersectent avec aoi_gdf
-            grouped_aoi_gdf = grouped_aoi_gdf[grouped_aoi_gdf.geometry.intersection(aoi_gdf.unary_union).area > 0].reset_index(drop=True)
-
-        else:
-            log.info("patch_size_max is null, keeping geometries as is after unary_union")
-
-
-        grouped_aoi_gdf.to_file(
-            grouped_aoi_gdf_path,
-            driver="GeoJSON",
-        )
     # Wait for the master process to be ready, it's not pretty but trainer.startegy.barrier does not work here
     if trainer.is_global_zero:
         (save_dir_tmp / "rank_0_ready").touch()
@@ -135,12 +80,42 @@ def predict(config: DictConfig) -> None:
 
     # Init lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule.instance._target_}>")
-    config.datamodule.dataset.gdf_path = aoi_gdf_path # we take the new gdf_path
     # TO avoid useless initialization of the datasets
     config.datamodule.dataset.train_dataset = None
     config.datamodule.dataset.val_dataset = None
     config.datamodule.dataset.test_dataset = None
     datamodule = hydra.utils.instantiate(config.datamodule.instance)
+
+    aoi_gdf = datamodule.hparams.predict_dataset.gdf
+        
+    # Group geometries that are adjacent or touching each other
+    unioned = unary_union(aoi_gdf['geometry'])
+    if isinstance(unioned, MultiPolygon):
+        polygons = list(unioned.geoms)
+    elif isinstance(unioned, Polygon):
+        polygons = [unioned]
+    else:
+        polygons = []
+    grouped_aoi_gdf = gpd.GeoDataFrame({'geometry': polygons}, crs=aoi_gdf.crs)        
+
+    # Subdivide geometries into patches if patch_size_max is provided
+    if config.get("patch_size_max", None) is not None:
+        patch_size_max = config.patch_size_max
+        resolution = config.datamodule.dataset.resolution_input
+        
+        log.info(f"Subdividing geometries according to patch_size_max={patch_size_max}")
+        grouped_aoi_gdf = subdivide_bounds_gdf(grouped_aoi_gdf, patch_size=patch_size_max, margin_size=0, resolution=resolution)
+        # Ne garder que les géométries de grouped_aoi_gdf qui intersectent avec aoi_gdf
+        grouped_aoi_gdf = grouped_aoi_gdf[grouped_aoi_gdf.geometry.intersection(aoi_gdf.unary_union).area > 0].reset_index(drop=True)
+
+    else:
+        log.info("patch_size_max is null, keeping geometries as is after unary_union")
+
+
+    grouped_aoi_gdf.to_file(
+        grouped_aoi_gdf_path,
+        driver="GeoJSON",
+    )
 
     # Init lightning module
     log.info(f"Instantiating module <{config.module.instance._target_}>")
@@ -207,6 +182,8 @@ def predict(config: DictConfig) -> None:
 
         # Remove the temporary directory
         shutil.rmtree(save_dir_tmp)
+
+        log.info(f"Predictions completed and saved in {save_dir_data}")
 
 
 def save_images_as_tifs(i_file, rank_dir, save_dir_tmp):

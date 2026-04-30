@@ -33,9 +33,9 @@ class getS1S2Composites:
         inputs = []
 
         file_lidar_date = lidar_date[:6] + "15" # files are stored with the date of the middle of the month
-        s2_vrt = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s2" / "s2.vrt"
-        s1_asc_vrt = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s1"  / "s1_asc.vrt"
-        s1_dsc_vrt = self.inputs_path / f"lidar_date_{file_lidar_date}" / "s1" / "s1_dsc.vrt"
+        s2_vrt = self.inputs_path / "s2" / "s2.vrt"
+        s1_asc_vrt = self.inputs_path / "s1"  / "s1_asc.vrt"
+        s1_dsc_vrt = self.inputs_path / "s1" / "s1_dsc.vrt"
         
         s2_image, _ = get_window(
             image_path=s2_vrt,

@@ -6,7 +6,8 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from pathlib import Path
 from shapely.geometry import box
-from src.datamodule.datamodule_utils import expand_gdf
+from src.global_utils import subdivide_bounds_gdf
+import math
 
 @hydra.main(version_base=None, config_path="../../../configs/preprocessing/datasets", config_name="get_clean_dataset")
 def main(cfg: DictConfig) -> None:    
@@ -18,11 +19,17 @@ def main(cfg: DictConfig) -> None:
     if cfg.get("via_bounds", None) is not None:
         row = {name : data for name, data in cfg.via_bounds.items() if name!="bounds"}
         bounds = cfg.via_bounds["bounds"]
-        bounds = bounds["left"], bounds["bottom"], bounds["right"], bounds["top"]
+        bounds = (
+            int(math.floor(bounds["left"] / 1000) * 1000),
+            int(math.floor(bounds["bottom"] / 1000) * 1000),
+            int(math.ceil(bounds["right"] / 1000) * 1000),
+            int(math.ceil(bounds["top"] / 1000) * 1000),
+        )
+
         row["geometry"] = box(*bounds)
         aoi_gdf = gpd.GeoDataFrame([row], crs="EPSG:2154")
 
-        initial_gdf = expand_gdf(aoi_gdf, patch_size=cfg.via_bounds["patch_size"], margin_size=0, resolution=cfg.via_bounds["resolution"])
+        initial_gdf = subdivide_bounds_gdf(aoi_gdf, patch_size=cfg.via_bounds["patch_size"], margin_size=0, resolution=cfg.via_bounds["resolution"])
         initial_gdf[cfg.grouping_dates_column] = cfg.via_bounds["date"].replace("/", "")
     
     elif cfg.get("via_geojson", None) is not None:
@@ -36,25 +43,16 @@ def main(cfg: DictConfig) -> None:
     
     logging.info(f"The size of the gdf is : {len(initial_gdf)}")
     
-    initial_gdf["grouping_dates"] = initial_gdf[cfg.grouping_dates_column].astype(str).str[:6] + "15"
-    grouping_dates_list = initial_gdf["grouping_dates"].drop_duplicates().tolist()
 
-    # Parallelize the creation of VRTs for each date
-    Parallel(n_jobs=cfg.n_jobs_parrallelized)(
-        delayed(create_vrts)(data_dir, date)
-        for date in tqdm(grouping_dates_list, desc="Create VRT for each date", total=len(grouping_dates_list))
-    )
+    create_vrts(data_dir)
     
     # Find valid VRTs for each geometry
     logging.info("Starting to compute 'vrt_list_timeseries' with parallel processing.")
     tqdm_desc = "Find correct VRT for each geometries"
     initial_gdf[cfg.validation_column] = Parallel(n_jobs=cfg.n_jobs_parrallelized)(
-        delayed(get_valid_vrts)(data_dir, row["geometry"], row["grouping_dates"]) 
+        delayed(get_valid_vrts)(data_dir, row["geometry"], row[cfg.grouping_dates_column], cfg.half_window_size) 
         for _, row in tqdm(initial_gdf.iterrows(), total=len(initial_gdf), desc=tqdm_desc)
     )
-    
-    # Remove the 'grouping_dates' column after it is no longer needed
-    initial_gdf = initial_gdf.drop(columns=["grouping_dates"])
     
     tqdm.pandas(desc="Delete bounds without data")
     logging.info("Filtering out rows with no valid vrt'.")

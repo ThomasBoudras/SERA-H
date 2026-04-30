@@ -36,6 +36,7 @@ class EDSR(nn.Module):
         act = nn.ReLU(True)
 
         self.n_channels = n_channels
+        self.scale = scale
         self.pretrained_model_path = Path(pretrained_model_path).resolve() if pretrained_model_path is not None else None 
         self.input_type = input_type
 
@@ -101,29 +102,34 @@ class EDSR(nn.Module):
         expanded_bias[:3] = module_tensor[[2,1,0]] # Sentinel-2 start with BGR
         load_from["tail.1.bias"] = expanded_bias
 
+        load_from["tail.0.0.weight"] = load_from["tail.0.0.weight"][:256*self.scale, :, :, :]
+        load_from["tail.0.0.bias"] = load_from["tail.0.0.bias"][:256*self.scale]
+        load_from["tail.0.2.weight"] = load_from["tail.0.2.weight"][:256*self.scale, :, :, :]
+        load_from["tail.0.2.bias"] = load_from["tail.0.2.bias"][:256*self.scale]
+
         self.load_state_dict(load_from, strict=False)
            
-    def forward_timeseries(self, x, meta_data):
-        # x: (B, T, C, H, W)
-        B, T, C, H, W = x.shape
-        x = x.view(B * T, C, H, W)
-        x = self.head(x)
-        res = self.body(x)
-        res += x
-        x = self.tail(res)
-        x = x.view(B, T, self.n_channels, x.shape[-2], x.shape[-1])
-        return x
+    def forward_timeseries(self, inputs, targets, metadata):
+        # inputs: (B, T, C, H, W)
+        B, T, C, H, W = inputs.shape
+        inputs = inputs.view(B * T, C, H, W)
+        inputs = self.head(inputs)
+        res = self.body(inputs)
+        res += inputs
+        inputs = self.tail(res)
+        inputs = inputs.view(B, T, self.n_channels, inputs.shape[-2], inputs.shape[-1])
+        return inputs
 
-    def forward_composites(self, x, meta_data):
-        # x: (B, C, H, W)
-        x = self.head(x)
-        res = self.body(x)
-        res += x
-        x = self.tail(res)
-        return x 
+    def forward_composites(self, inputs, targets, metadata):
+        # inputs: (B, C, H, W)
+        inputs = self.head(inputs)
+        res = self.body(inputs)
+        res += inputs
+        inputs = self.tail(res)
+        return inputs 
     
-    def forward(self, x, meta_data) :
-        return self.forward_method(x, meta_data)
+    def forward(self, inputs, targets, metadata) :
+        return self.forward_method(inputs, targets, metadata)
 
 
         

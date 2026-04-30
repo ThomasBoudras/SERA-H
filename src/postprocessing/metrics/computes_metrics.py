@@ -23,6 +23,10 @@ def compute_metrics(config: DictConfig) -> None:
 
     # Read the geometries and save them in save_dir
     aoi_gdf = gpd.read_file(config.geometries_path)
+
+    if "test" in config.version_metrics:
+        aoi_gdf = aoi_gdf[aoi_gdf["split"] == "test"].reset_index(drop=True)
+        
     aoi_gdf_path = Path(config.save_dir) / "gdf_metrics.geojson"
     if config.get("n_samples", None) is not None:
         aoi_gdf = aoi_gdf.sample(config.n_samples).reset_index(drop=True)

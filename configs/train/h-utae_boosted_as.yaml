@@ -1,0 +1,36 @@
+# @package _global_
+
+defaults:
+    - override /module/regression_model: utae
+    - override /module/super_resolution_model: null
+
+project: "train_sera"
+run_name: h-utae_boosted_as
+run_version: vx_${run_name}
+data_dir: data/
+ckpt_path: last
+
+module:
+    regression_model:        
+        encoder_widths: [128, 256, 512, 1024]
+        decoder_widths: [256, 256, 512, 1024]
+        out_conv: [128, 1]
+        d_model: 1024
+        n_head: 64
+        d_k: 16
+        
+    instance:
+        super_resolution_model: null
+    metrics:
+        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+        classification_path: ${data_dir}/open_canopy/
+
+datamodule:
+    instance:
+        batch_size: 8
+    dataset:
+        patch_size_input: 128
+        patch_size_target: 128
+        resolution_input: 2.5
+        get_targets:
+            targets_path: ${data_dir}/open_canopy/

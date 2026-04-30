@@ -2,4 +2,5 @@ _target_: src.module.regression_model.unet.UNet
 n_channels_in: 14
 bilinear: False
 out_activation: null
-width_multiplier: 1
+encoder_widths: [64, 128, 256, 512, 1024]
+decoder_widths: [64, 128, 256, 512]

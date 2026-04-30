@@ -1,0 +1,374 @@
+# @package _global_
+
+model : h-figure_scatter_plot
+min_height : 0
+max_height : 50
+resolution : 2.5  
+real_patch_size_plot : 500
+nb_jobs : 10
+seed : 12345
+print_config : True
+nb_plots : 50
+max_points_per_bin : 100000
+n_samples: 1000
+
+resampling_method_liu: bilinear
+
+data_dir : data/
+save_dir : ${data_dir}/logs/metrics/height_map/${model}
+output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
+grouping_dates : lidar_acquisition_date
+version_prediction : test_lidarhd
+version_metrics : test_lidarhd
+
+geometries_path : ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir : hydra_logs
+
+get_images : 
+  _target_ : src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:    
+    height_target : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_pauls : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/paul2025/<year>/paul2025/full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: 20221231
+      min_date: 20210101
+      grouping_dates: ${grouping_dates}
+
+    height_pred_schwartz : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/schwartz2025/<year>/full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 0.01
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_fogel : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/sota/fogel2025/<year>/pred.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_sera : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_liu : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: data/sota/liu2023/liu2023/full.vrt
+      resolution: ${resolution}
+      resampling_method: ${resampling_method_liu}
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    height_pred_tolan : 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: data/sota/tolan2024/tolan2024/full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    vegetation_mask :
+      _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
+      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      resolution: ${resolution}
+      classes_to_keep: [5]
+      grouping_dates: ${grouping_dates}
+      
+  image_computed_set:
+    masked_height_target :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_target
+      mask_name: vegetation_mask
+
+    masked_height_pred_pauls :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_pauls
+      mask_name: vegetation_mask
+
+    masked_height_pred_schwartz :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_schwartz
+      mask_name: vegetation_mask
+
+    masked_height_pred_fogel :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_fogel
+      mask_name: vegetation_mask
+
+    masked_height_pred_sera :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_sera
+      mask_name: vegetation_mask
+    
+    masked_height_pred_liu :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_liu
+      mask_name: vegetation_mask
+
+    masked_height_pred_tolan :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: height_pred_tolan
+      mask_name: vegetation_mask
+
+get_metrics_local : 
+  _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set :
+    flatten_target_pred_pauls :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_pauls
+      name_target : masked_height_target
+
+    flatten_target_pred_schwartz :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_schwartz
+      name_target : masked_height_target
+      
+    flatten_target_pred_fogel :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_fogel
+      name_target : masked_height_target
+
+    flatten_target_pred_sera :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_sera
+      name_target : masked_height_target
+
+    flatten_target_pred_liu :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_liu
+      name_target : masked_height_target
+
+    flatten_target_pred_tolan :
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.flatten_local_computer
+      name_pred : masked_height_pred_tolan
+      name_target : masked_height_target
+
+get_metrics_global : 
+  _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_print : []
+  metrics_set :
+    flatten_tuples_target_pred_pauls :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_pauls
+
+    flatten_tuples_target_pred_schwartz :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_schwartz
+
+    flatten_tuples_target_pred_fogel :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_fogel
+
+    flatten_tuples_target_pred_sera :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_sera
+
+    flatten_tuples_target_pred_liu :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_liu
+
+    flatten_tuples_target_pred_tolan :
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric : flatten_target_pred_tolan
+
+get_plots_local: null
+
+get_plots_global: 
+  _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
+  save_dir : ${save_dir}/${version_metrics}_figures
+  model_name : ${model}
+  plot_set :
+    scatter_plots_all_models :
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 2
+      nb_col : 3
+      size_plot_width: 11
+      size_plot_height: 7
+      graph_list :
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 0
+          idx_col : 0
+          graph_title : "SERA-H"
+          rowspan: 1
+          colspan: 1
+          bold_title: True
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_sera
+            x_label: null
+            y_label: "Predicted height (m)"
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: False
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 0
+          idx_col : 1
+          graph_title : "Fogel"
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_fogel
+            x_label: null
+            y_label: null
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: False
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 0
+          idx_col : 2
+          graph_title : "Liu"
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_liu
+            x_label: null
+            y_label: null
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: False
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 1
+          idx_col : 0
+          graph_title : "Tolan"
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_tolan
+            x_label: "Ground truth height (m)"
+            y_label: "Predicted height (m)"
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: True  
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 1
+          idx_col : 1
+          graph_title : "Pauls"
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_pauls
+            x_label: "Ground truth height (m)"
+            y_label: null
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: False
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row : 1
+          idx_col : 2
+          graph_title : "Schwartz"
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_scatter_density
+            metric_name: flatten_tuples_target_pred_schwartz
+            x_label: "Ground truth height (m)"
+            y_label: null
+            min_range: ${min_height}
+            max_range: ${max_height}
+            bins: 30
+            metrics_plot: ["r2"]
+            max_points_on_scatter: ${max_points_per_bin}
+            point_size: 2 
+            x_y_line: True
+            fit_line: True
+            show_legend: True
+            add_noise: False

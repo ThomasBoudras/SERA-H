@@ -28,14 +28,12 @@ class maskedForestMetrics(Metric):
 
 
     # Update the metrics for each batch
-    def update(self, pred, target, meta_data):
+    def update(self, pred, target, metadata):
         # Get the vegetation mask
         if self.classification_path is not None:
-            bounds_batch = meta_data["bounds"]
-            if "lidar_years" in meta_data:
-                lidar_years_batch = meta_data["lidar_years"]
-            else : 
-                lidar_years_batch = meta_data["classification_years"] #change map dataset case (we have juste one year where we have classification)
+            bounds_batch = metadata["bounds"]
+            if "lidar_acquisition_date" in metadata:
+                lidar_years_batch = [str(date)[:4] for date in metadata["lidar_acquisition_date"]]
             vegetation_mask = []
             for i, bounds in enumerate(bounds_batch):
                 year = lidar_years_batch[i].item()
@@ -52,7 +50,7 @@ class maskedForestMetrics(Metric):
                 vegetation_mask.append(mask)
         else : 
             # If no classification path, create a mask full of true values
-            vegetation_mask = [torch.ones_like(pred[0], dtype=torch.bool) for _ in range(len(pred))]
+            vegetation_mask = [torch.ones_like(target[0], dtype=torch.bool) for _ in range(len(target))]
         
         # Stack the vegetation masks and create a mask for the nan values
         vegetation_mask = torch.stack(vegetation_mask).to(target.device)
@@ -62,7 +60,7 @@ class maskedForestMetrics(Metric):
         # Update the metrics
         self.metrics_calculator.batch_update(
             pred = pred.to(target.device), 
-            target = target.to(target.device), 
+            target = target, 
             mask = mask, 
             states = self, 
         )

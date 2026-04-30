@@ -19,26 +19,30 @@ class UNet(nn.Module):
             n_channels_in,
             bilinear,
             out_activation,
-            width_multiplier,
+            encoder_widths,
+            decoder_widths,
             ):
         
         super(UNet, self).__init__()
         self.n_channels = n_channels_in
         self.bilinear = bilinear
         
-        base_channels = int(64 * width_multiplier)
-        
-        self.inc = DoubleConv(n_channels_in, base_channels)
-        self.down1 = Down(base_channels, base_channels * 2)
-        self.down2 = Down(base_channels * 2, base_channels * 4)
-        self.down3 = Down(base_channels * 4, base_channels * 8)
+
+        # Encoder
+        self.inc = DoubleConv(n_channels_in, encoder_widths[0])
+        self.down1 = Down(encoder_widths[0], encoder_widths[1])
+        self.down2 = Down(encoder_widths[1], encoder_widths[2])
+        self.down3 = Down(encoder_widths[2], encoder_widths[3])
         factor = 2 if bilinear else 1
-        self.down4 = Down(base_channels * 8, (base_channels * 16) // factor)
-        self.up1 = Up((base_channels * 16), (base_channels * 8) // factor, bilinear)
-        self.up2 = Up((base_channels * 8), (base_channels * 4) // factor, bilinear)
-        self.up3 = Up((base_channels * 4), (base_channels * 2) // factor, bilinear)
-        self.up4 = Up((base_channels * 2), base_channels, bilinear)
-        self.outc = OutConv(base_channels, 1)
+        self.down4 = Down(encoder_widths[3], encoder_widths[4] // factor)
+        
+        # Decoder
+        self.up1 = Up(encoder_widths[4], decoder_widths[-1] // factor, bilinear)
+        self.up2 = Up(decoder_widths[-1], decoder_widths[-2] // factor, bilinear)
+        self.up3 = Up(decoder_widths[-2], decoder_widths[-3] // factor, bilinear)
+        self.up4 = Up(decoder_widths[-3], decoder_widths[-4], bilinear)
+        
+        self.outc = OutConv(decoder_widths[-4], 1)
         
         self.out_activation = None
         if out_activation is not None:
@@ -47,8 +51,8 @@ class UNet(nn.Module):
             else:
                 self.out_activation = out_activation
 
-    def forward(self, x, meta_data):
-        x1 = self.inc(x)
+    def forward(self, inputs, labels=None, metadata=None):
+        x1 = self.inc(inputs)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
