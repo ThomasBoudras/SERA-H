@@ -1,11 +1,11 @@
 _target_: src.module.regression_model.utae.UTAE
 inputs_dim: 14
-encoder_widths : [64, 64, 64, 128]
+encoder_widths: [64, 64, 64, 128]
 decoder_widths: [32, 32, 64, 128]
 out_conv: [32,1]
 str_conv_k: 4
 str_conv_s: 2
-str_conv_p : 1
+str_conv_p: 1
 agg_mode: "att_group"
 encoder_norm: "group"
 n_head: 16

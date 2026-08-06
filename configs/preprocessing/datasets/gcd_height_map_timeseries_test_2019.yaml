@@ -17,6 +17,6 @@ gdf_unclean_path: ${data_dir}/gdf_height_map_timeseries_test_2019_unsaved.geojso
 half_window_size: 60
 
 hydra:
-  run :
-    dir : ${data_dir}/logs
-  output_subdir : hydra_logs
+  run:
+    dir: ${data_dir}/logs
+  output_subdir: hydra_logs

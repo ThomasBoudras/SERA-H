@@ -4,7 +4,7 @@ model: h-figure_boxplot_error_by_forest_type
 # General settings
 min_height: 0
 max_height: 50
-resolution: 2.5 
+resolution: 2.5
 nb_jobs: 10
 seed: 12345
 date_column: lidar_acquisition_date
@@ -29,10 +29,10 @@ hydra:
   output_subdir: hydra_logs
 
 # 1. Load ground truth and all prediction maps
-get_images: 
+get_images:
   _target_: src.postprocessing.metrics.get_images_utils.get_images
-  image_loaded_set:    
-    height_target: 
+  image_loaded_set:
+    height_target:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
       path: ${data_dir}/open_canopy/<year>/lidar.vrt
       resolution: ${resolution}
@@ -46,9 +46,9 @@ get_images:
       grouping_dates: ${grouping_dates}
 
     # Predictions to compare
-    pred_fogel2025: 
+    pred_fogel2025:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/open_canopy/<year>/pred.vrt
+      path: data/open_canopy/<year>/pred.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1
@@ -59,7 +59,7 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    pred_sera_h: 
+    pred_sera_h:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
       path: ${data_dir}/logs/pred_sera/h-sera_h_max/${version_prediction}/predictions/data/h-sera_h_max_full.vrt
       resolution: ${resolution}
@@ -71,7 +71,7 @@ get_images:
       max_date: null
       min_date: null
       grouping_dates: ${grouping_dates}
-      
+
     deciduous_mask:
       _target_: src.postprocessing.metrics.get_images_utils.type_forest_mask_loader
       ign_forest_mask_path: ${data_dir}/utils/BD_Foret_France_simp1m.gpkg
@@ -90,7 +90,7 @@ get_images:
       type_forest: mixed
 
   image_computed_set:
-    masked_height_sera_deciduous :
+    masked_height_sera_deciduous:
       _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
       input_name: pred_sera_h
       mask_name: deciduous_mask
@@ -106,7 +106,7 @@ get_images:
       mask_name: mixed_mask
 
 # 2. Compute local metrics (pemr patch/geometry) for each prediction
-get_metrics_local: 
+get_metrics_local:
   _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
   metrics_set:
     bins_error_sera_h_deciduous:
@@ -131,7 +131,7 @@ get_metrics_local:
       method_metrics: error
 
 # 3. Aggregate local metrics into global metrics (lists of errors for boxplots)
-get_metrics_global: 
+get_metrics_global:
   _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
   metrics_to_save: null
   output_path_xlsx: null
@@ -151,12 +151,12 @@ get_metrics_global:
 get_plots_local: null
 
 # 4. Generate the final plot
-get_plots_global: 
+get_plots_global:
   _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
   save_dir: ${save_dir}/${version_metrics}_figures
   model_name: "error_distribution_by_forest_type"
   metrics_to_save: all
-  output_path_xlsx : ${save_dir}/plots_metrics_${model}.xlsx
+  output_path_xlsx: ${save_dir}/plots_metrics_${model}.xlsx
   plot_set:
     error_distribution_plot:
       _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
@@ -184,12 +184,12 @@ get_plots_global:
               bins_tuples_error_sera_h_coniferous,
               bins_tuples_error_sera_h_deciduous,
               bins_tuples_error_sera_h_mixed
-            ] 
+            ]
             legend_labels: ["Coniferous", "Deciduous", "Mixed"]
             bins: ["0-2m", "2-10m", "10-15m", "15-20m", "20-30m", "30-40m"]
             x_label: "Ground truth height"
             y_label: "Error (in m)"
-            colors: ["#2E86C1", "#FF5733", "#17BEBB"] 
+            colors: ["#2E86C1", "#FF5733", "#17BEBB"]
             y_min: -25
             y_max: 25
             legends_and_labels_shown: True

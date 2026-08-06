@@ -38,7 +38,7 @@ Comparison of SERA-H with state-of-the-art methods:
 
 ### Prerequisites
 - Linux or macOS
-- Python 3.8+
+- Python 3.11
 - NVIDIA GPU + CUDA
 
 ### Setup
@@ -104,14 +104,21 @@ Download the model weights (e.g., `edsr_baseline_x4.pt`) and place them in:
 data/utils/
 ```
 
+### 6. (Optional) Prepare State-of-the-Art Predictions for Comparison
+
+To reproduce the comparison table above or generate comparison figures, you need the prediction maps of the other methods (Tolan, Liu, Fogel, Schwartz, Pauls, Lang). These can be obtained either through the download links provided in their respective original papers or via the Google Earth Engine API. Place them so that their path matches the `path` field defined in the corresponding `configs/postprocessing/metrics/h-individual_<method>.yaml` file (predictions are generally expected under `data/sota/<method>/`).
+
 After running these steps, your data should be organized as follows:
 
 ```
 data/
 ├── utils/         # Helper data (geojsons, pre-trained EDSR weights)
 ├── sentinel/      # Downloaded Sentinel-1 and Sentinel-2 images
-└── open_canopy/   # Lidar and forest mask data you downloaded from Hugging Face
+├── open_canopy/   # Lidar and forest mask data you downloaded from Hugging Face
+└── sota/          # (Optional) State-of-the-art predictions used for comparison
 ```
+
+> **Note**: `configs/preprocessing/download`, `configs/preprocessing/datasets`, and `configs/predict` also include `*_test_2019` config variants, which run the same download/clean/predict workflow described above on a separate 2019 test area.
 
 ## Usage
 
@@ -149,10 +156,20 @@ python -m src.presave_dataset predict=h-sera_h
 python -m src.predict predict=h-sera_h
 ```
 
-After inference, compute the evaluation metrics based on the predictions:
+After inference, compute the evaluation metrics based on the predictions. Each model/method has its own metrics config in `configs/postprocessing/metrics/`, named `h-individual_<method>.yaml`:
 
 ```bash
-python -m src.postprocessing.metrics.computes_metrics -cn=h-sera model=h-sera_h
+# Compute local + global metrics for SERA-H
+python -m src.postprocessing.metrics.computes_metrics -cn=h-individual_sera
+
+# Compute metrics for a state-of-the-art baseline (requires the corresponding data, see Data Preparation)
+python -m src.postprocessing.metrics.computes_metrics -cn=h-individual_tolan2024
+```
+
+Once metrics have been computed and saved (as `.xlsx` files) for the models you want to compare, use the `h-figure_*.yaml` configs to generate comparison figures (scatter plots, boxplots, qualitative examples, etc.):
+
+```bash
+python -m src.postprocessing.metrics.computes_metrics -cn=h-figure_scatter_plot
 ```
 
 ## Project Structure
@@ -164,7 +181,15 @@ SERA-H/
 ├── configs/                 # Hydra configuration files
 │   ├── datamodule/
 │   ├── module/
-│   ├── train/
+│   ├── callbacks/
+│   ├── logger/
+│   ├── trainer/
+│   ├── hydra/
+│   ├── train/               # Training configs (default + `_as` ablation studies)
+│   ├── predict/             # Inference configs
+│   ├── preprocessing/
+│   │   ├── download/        # Configs for downloading Sentinel-1/2 data
+│   │   └── datasets/        # Configs for cleaning/preparing the dataset
 │   ├── postprocessing/
 │   │   └── metrics/         # Configs for evaluation and figures (SOTA models, scatter plots, etc.)
 │   └── config.yaml          # Main config file
@@ -177,9 +202,12 @@ SERA-H/
 ├── src/                     # Source code
 │   ├── datamodule/          # LightningDataModules
 │   ├── module/              # LightningModules (Model architecture)
+│   ├── callbacks/           # Lightning callbacks (e.g. image logging)
+│   ├── preprocessing/       # Scripts for downloading and cleaning the dataset
+│   ├── postprocessing/      # Scripts for computing metrics and generating figures
 │   ├── train.py             # Main training script
 │   ├── predict.py           # Inference script
-│   └── postprocessing/      # Scripts for computing metrics and generating figures
+│   └── presave_dataset.py   # Pre-extracts and saves dataset patches to disk
 ├── requirements.txt         # Python dependencies
 └── setup.cfg                # Project metadata
 ```

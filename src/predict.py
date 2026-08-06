@@ -1,32 +1,42 @@
-import hydra
+"""Entry point for running distributed inference and merging predicted patches into GeoTIFFs."""
+
 import shutil
+import time
 from pathlib import Path
-import geopandas as gpd 
+from typing import List
+
+import geopandas as gpd
+import hydra
 import numpy as np
 import rasterio
 import torch
+from joblib import Parallel, delayed
+from lightning import seed_everything
 from omegaconf import DictConfig, OmegaConf
 from osgeo import gdal
-from shapely.geometry import box
-import glob
 from rasterio.transform import from_bounds
-from lightning import seed_everything
-from tqdm import tqdm
-from src import global_utils as utils
-from src.global_utils import get_window
-from shapely.ops import unary_union
 from shapely.geometry import MultiPolygon, Polygon
-from shapely.geometry import box
-from joblib import Parallel, delayed
-from src.global_utils import subdivide_bounds_gdf
-import time
+from shapely.ops import unary_union
+from tqdm import tqdm
+
+from src import global_utils as utils
+from src.global_utils import get_window, subdivide_bounds_gdf
 
 log = utils.get_logger(__name__)
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config")
 def predict(config: DictConfig) -> None:
-   
+    """Run distributed prediction over the areas of interest and merge results into GeoTIFFs.
+
+    Instantiates the Lightning trainer, datamodule and module from the Hydra config, groups
+    and optionally subdivides the areas of interest, runs `trainer.predict`, then merges the
+    per-batch predicted patches into per-area GeoTIFFs and builds a VRT mosaic.
+
+    Args:
+        config (DictConfig): Hydra configuration composed from the config group.
+    """
+
     # Print the config
     if config.get("print_config"):
         utils.print_config(config, resolve=True)
@@ -48,16 +58,16 @@ def predict(config: DictConfig) -> None:
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer = hydra.utils.instantiate(config.trainer, logger=logger)
 
-    # Prepare initialisation of datamodule and module 
+    # Prepare initialisation of datamodule and module
     # Define paths for all processes
     save_dir = Path(config.save_dir).resolve()
     save_dir_tmp = save_dir / "tmp"
     save_dir_data = save_dir / "data"
     grouped_aoi_gdf_path = save_dir / "grouped_aoi_gdf.geojson"
-    
+
     # Create directories and files, just for the master process (to avoid race conditions)
     if trainer.is_global_zero:
-        if save_dir.exists() :
+        if save_dir.exists():
             shutil.rmtree(save_dir)
         save_dir.mkdir(parents=True)
         save_dir_data.mkdir()
@@ -70,13 +80,12 @@ def predict(config: DictConfig) -> None:
     if trainer.is_global_zero:
         (save_dir_tmp / "rank_0_ready").touch()
 
-    while not (save_dir_tmp / "rank_0_ready").exists() :
+    while not (save_dir_tmp / "rank_0_ready").exists():
         time.sleep(1)
 
     if trainer.is_global_zero:
         time.sleep(3)
         (save_dir_tmp / "rank_0_ready").unlink()
-        
 
     # Init lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule.instance._target_}>")
@@ -87,30 +96,33 @@ def predict(config: DictConfig) -> None:
     datamodule = hydra.utils.instantiate(config.datamodule.instance)
 
     aoi_gdf = datamodule.hparams.predict_dataset.gdf
-        
+
     # Group geometries that are adjacent or touching each other
-    unioned = unary_union(aoi_gdf['geometry'])
+    unioned = unary_union(aoi_gdf["geometry"])
     if isinstance(unioned, MultiPolygon):
         polygons = list(unioned.geoms)
     elif isinstance(unioned, Polygon):
         polygons = [unioned]
     else:
         polygons = []
-    grouped_aoi_gdf = gpd.GeoDataFrame({'geometry': polygons}, crs=aoi_gdf.crs)        
+    grouped_aoi_gdf = gpd.GeoDataFrame({"geometry": polygons}, crs=aoi_gdf.crs)
 
     # Subdivide geometries into patches if patch_size_max is provided
     if config.get("patch_size_max", None) is not None:
         patch_size_max = config.patch_size_max
         resolution = config.datamodule.dataset.resolution_input
-        
+
         log.info(f"Subdividing geometries according to patch_size_max={patch_size_max}")
-        grouped_aoi_gdf = subdivide_bounds_gdf(grouped_aoi_gdf, patch_size=patch_size_max, margin_size=0, resolution=resolution)
+        grouped_aoi_gdf = subdivide_bounds_gdf(
+            grouped_aoi_gdf, patch_size=patch_size_max, margin_size=0, resolution=resolution
+        )
         # Ne garder que les géométries de grouped_aoi_gdf qui intersectent avec aoi_gdf
-        grouped_aoi_gdf = grouped_aoi_gdf[grouped_aoi_gdf.geometry.intersection(aoi_gdf.unary_union).area > 0].reset_index(drop=True)
+        grouped_aoi_gdf = grouped_aoi_gdf[
+            grouped_aoi_gdf.geometry.intersection(aoi_gdf.unary_union).area > 0
+        ].reset_index(drop=True)
 
     else:
         log.info("patch_size_max is null, keeping geometries as is after unary_union")
-
 
     grouped_aoi_gdf.to_file(
         grouped_aoi_gdf_path,
@@ -125,27 +137,29 @@ def predict(config: DictConfig) -> None:
     # Load the model
     if config.get("ckpt_path") is not None or config.get("ckpt_path") != "last":
         ckpt_path = config.get("ckpt_path")
-        if config.load_just_weights :
+        if config.load_just_weights:
             log.info(f"Start of training from checkpoint {ckpt_path} using only the weights !")
             checkpoint = torch.load(ckpt_path)
 
             if "state_dict" in checkpoint:
-                missing_keys, unexpected_keys = module.load_state_dict(checkpoint['state_dict'], strict=False)
+                missing_keys, unexpected_keys = module.load_state_dict(
+                    checkpoint["state_dict"], strict=False
+                )
             else:
                 missing_keys, unexpected_keys = module.load_state_dict(checkpoint, strict=False)
-            
+
                 log.warning(f"Missing keys in checkpoint: {missing_keys}")
                 log.warning(f"Unexpected keys in checkpoint: {unexpected_keys}")
-            
+
             ckpt_path = None
-        
-        else :
+
+        else:
             log.info(f"Start of training from checkpoint {ckpt_path} !")
-    
-    elif ckpt_path == "last" :
+
+    elif ckpt_path == "last":
         log.info(f"Starting training from last checkpoint {ckpt_path} !")
-    
-    else :
+
+    else:
         log.info("Starting training from scratch!")
         ckpt_path = None
 
@@ -153,28 +167,32 @@ def predict(config: DictConfig) -> None:
     trainer.predict(module, ckpt_path=ckpt_path, datamodule=datamodule)
 
     if trainer.is_global_zero:
-        rank_dirs = [file for file in save_dir_tmp.iterdir() if file.is_dir() and file.name.startswith("rank")]
+        rank_dirs = [
+            file
+            for file in save_dir_tmp.iterdir()
+            if file.is_dir() and file.name.startswith("rank")
+        ]
         for rank_dir in rank_dirs:
 
             # Get the number of predicted files
-            nb_predicted_files = len([
-                file
-                for file in (rank_dir / "preds").iterdir()
-                if file.suffix == ".npy"
-            ])
+            nb_predicted_files = len(
+                [file for file in (rank_dir / "preds").iterdir() if file.suffix == ".npy"]
+            )
 
             # Save numpy predictions as tifs
             Parallel(n_jobs=-1)(
-                delayed(save_images_as_tifs)(i_file, rank_dir, save_dir_tmp) 
+                delayed(save_images_as_tifs)(i_file, rank_dir, save_dir_tmp)
                 for i_file in tqdm(range(nb_predicted_files), desc="Saving preds for each batch")
             )
 
         # Get the list of all patch GeoTIFF files in the temporary directory
-        patches_path = save_dir_tmp / f"patch_tifs" 
-        list_subtif = [file for file in patches_path.iterdir() if file.suffix == ".tif"]  
+        patches_path = save_dir_tmp / "patch_tifs"
+        list_subtif = [file for file in patches_path.iterdir() if file.suffix == ".tif"]
         Parallel(n_jobs=-1)(
-            delayed(merge_tifs)(tif_poly, list_subtif, save_dir_data, config.run_name) 
-            for tif_poly in tqdm(grouped_aoi_gdf["geometry"], total=len(grouped_aoi_gdf), desc="Merging tifs")
+            delayed(merge_tifs)(tif_poly, list_subtif, save_dir_data, config.run_name)
+            for tif_poly in tqdm(
+                grouped_aoi_gdf["geometry"], total=len(grouped_aoi_gdf), desc="Merging tifs"
+            )
         )
 
         # Create vrt
@@ -186,17 +204,21 @@ def predict(config: DictConfig) -> None:
         log.info(f"Predictions completed and saved in {save_dir_data}")
 
 
-def save_images_as_tifs(i_file, rank_dir, save_dir_tmp):
-    """
-    Save individual prediction patches as GeoTIFF files.
+def save_images_as_tifs(i_file: int, rank_dir: Path, save_dir_tmp: Path) -> None:
+    """Save individual prediction patches as GeoTIFF files.
 
     Args:
-        i_file (int): Index of the batch file to process. This corresponds to the batch number used in the prediction saving step.
-        save_dir_tmp (Path): Path to the temporary directory where the prediction and bounds .npy files are stored. The function will also save the resulting GeoTIFF files in a subdirectory of this path.
+        i_file (int): Index of the batch file to process. This corresponds to the batch
+            number used in the prediction saving step.
+        rank_dir (Path): Path to the directory of a given process rank, containing the
+            `preds` and `bounds` .npy files for that rank.
+        save_dir_tmp (Path): Path to the temporary directory where the prediction and bounds
+            .npy files are stored. The function will also save the resulting GeoTIFF files
+            in a subdirectory of this path.
     """
     pred_file = rank_dir / "preds" / f"batch_{i_file}.npy"
     bounds_file = rank_dir / "bounds" / f"batch_{i_file}.npy"
-    
+
     # Load the prediction and bounds for the current batch
     batch_preds = np.load(pred_file)
     batch_bounds = np.load(bounds_file)
@@ -210,8 +232,12 @@ def save_images_as_tifs(i_file, rank_dir, save_dir_tmp):
         transform = from_bounds(*bounds, width, height)
 
         # Create the path to save the GeoTIFF file
-        save_image_path = save_dir_tmp / f"patch_tifs" / f"{int(bounds[0])}_{int(bounds[1])}_{int(bounds[2])}_{int(bounds[3])}.tif"
-        
+        save_image_path = (
+            save_dir_tmp
+            / "patch_tifs"
+            / f"{int(bounds[0])}_{int(bounds[1])}_{int(bounds[2])}_{int(bounds[3])}.tif"
+        )
+
         # Save the GeoTIFF file
         with rasterio.open(
             save_image_path,
@@ -229,28 +255,29 @@ def save_images_as_tifs(i_file, rank_dir, save_dir_tmp):
     bounds_file.unlink()
 
 
-def merge_tifs(tif_poly, list_subtif, save_dir_data, model_name):
-    """
-    Merge adjacent GeoTIFF files into a single image.
+def merge_tifs(
+    tif_poly: Polygon, list_subtif: List[Path], save_dir_data: Path, model_name: str
+) -> None:
+    """Merge adjacent GeoTIFF files into a single image.
 
     Args:
         tif_poly (Polygon): Polygon for the current patch.
-        list_subtif (list): List of GeoTIFF files to merge.
+        list_subtif (List[Path]): List of GeoTIFF files to merge.
         save_dir_data (Path): Path to the directory where the merged image will be saved.
         model_name (str): Name of the model used for the predictions.
     """
     tif_bounds = list(tif_poly.bounds)
-        
+
     # Filter the tifs that intersect the current patch's bounding box
     list_subtif_intersect = []
     for subtif in list_subtif:
         subtif_bounds = subtif.stem.split("_")
         if (
-            tif_bounds[0] <= int(subtif_bounds[2]) and
-            tif_bounds[1] <= int(subtif_bounds[3]) and
-            int(subtif_bounds[0]) <= tif_bounds[2] and
-            int(subtif_bounds[1]) <= tif_bounds[3]
-        ) :
+            tif_bounds[0] <= int(subtif_bounds[2])
+            and tif_bounds[1] <= int(subtif_bounds[3])
+            and int(subtif_bounds[0]) <= tif_bounds[2]
+            and int(subtif_bounds[1]) <= tif_bounds[3]
+        ):
             list_subtif_intersect.append(subtif)
 
     # To avoid out-of-bounds issues, we extend the tif bounds to the global bounds of all subtifs.
@@ -264,15 +291,15 @@ def merge_tifs(tif_poly, list_subtif, save_dir_data, model_name):
 
     # Get resolution from the first subtif
     with rasterio.open(list_subtif_intersect[0]) as src:
-        resolution = src.transform.a  
-    
+        resolution = src.transform.a
+
     # Create a window from the tif_bounds with the correct resolution
     window_width = round((tif_bounds[2] - tif_bounds[0]) / resolution)
     window_height = round((tif_bounds[3] - tif_bounds[1]) / resolution)
     window_transform = from_bounds(*tif_bounds, window_width, window_height)
-    
-    mean_image = np.zeros((1,window_height, window_width), dtype=np.float32)
-    nb_values_image = np.zeros((1,window_height, window_width), dtype=np.float32)
+
+    mean_image = np.zeros((1, window_height, window_width), dtype=np.float32)
+    nb_values_image = np.zeros((1, window_height, window_width), dtype=np.float32)
     for subtif_file in list_subtif_intersect:
         bounds = subtif_file.stem.split("_")
         bounds = [int(bounds[0]), int(bounds[1]), int(bounds[2]), int(bounds[3])]
@@ -293,15 +320,24 @@ def merge_tifs(tif_poly, list_subtif, save_dir_data, model_name):
         subtif_row_start = int(round(subtif_row_start))
         subtif_col_end = int(round(subtif_col_end))
         subtif_row_end = int(round(subtif_row_end))
-        
+
         # Update the mean_image and nb_values_image for the specific region
         mask_nan = np.isnan(image)
-        mean_image[:,subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end] = np.nansum([
-            mean_image[:,subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end],
-            image.astype(np.float32)
-        ], axis=0)
-        nb_values_image[:,subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end][~mask_nan] += 1
-        
+        mean_image[:, subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end] = (
+            np.nansum(
+                [
+                    mean_image[
+                        :, subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end
+                    ],
+                    image.astype(np.float32),
+                ],
+                axis=0,
+            )
+        )
+        nb_values_image[:, subtif_row_start:subtif_row_end, subtif_col_start:subtif_col_end][
+            ~mask_nan
+        ] += 1
+
     valid_mask = nb_values_image != 0
     mean_image[valid_mask] = mean_image[valid_mask] / nb_values_image[valid_mask]
     mean_image[~valid_mask] = np.nan
@@ -331,28 +367,28 @@ def merge_tifs(tif_poly, list_subtif, save_dir_data, model_name):
     ) as dst:
         dst.write(mean_image)
 
-def create_vrts(save_dir_data, model_name):
+
+def create_vrts(save_dir_data: Path, model_name: str) -> None:
+    """Build a VRT mosaic referencing all merged GeoTIFFs for a given model run.
+
+    Args:
+        save_dir_data (Path): Directory containing the merged GeoTIFF files.
+        model_name (str): Name of the model used for the predictions, used to name the VRT
+            and select the files it references.
+    """
     vrt_path = save_dir_data / f"{model_name}_full.vrt"
-    files_list = [
-         str(file) for file in (save_dir_data).iterdir() if file.suffix == ".tif"
-    ]
+    files_list = [str(file) for file in (save_dir_data).iterdir() if file.suffix == ".tif"]
 
     gdal.UseExceptions()
     vrt_options = gdal.BuildVRTOptions(
         separate=False,
         srcNodata="nan",
         VRTNodata="nan",
-    )  
-   
+    )
+
     vrt = gdal.BuildVRT(vrt_path, files_list, options=vrt_options)
     vrt.FlushCache()
 
+
 if __name__ == "__main__":
     predict()
-
-
-
-
-        
-        
-

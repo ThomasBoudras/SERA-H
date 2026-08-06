@@ -7,72 +7,90 @@ https://github.com/VSainteuf/utae-paps
 Garnot, Vivien Sainte Fare, and Loic Landrieu. "Panoptic segmentation of satellite image time series with convolutional temporal attention networks."
 Proceedings of the IEEE/CVF International Conference on Computer Vision. 2021.
 """
+
+from typing import Any, Dict, List, Optional
+
+import torch
 import torch.nn as nn
+
 from src.module.regression_model.components.ltae import LTAE2d
-from src.module.regression_model.components.utae_utils import DownConvBlock, UpConvBlock, ConvBlock, Temporal_Aggregator
+from src.module.regression_model.components.utae_utils import (
+    ConvBlock,
+    DownConvBlock,
+    Temporal_Aggregator,
+    UpConvBlock,
+)
+
 
 class UTAE(nn.Module):
+    """U-TAE regression model combining a spatial U-Net-like encoder/decoder with a
+    Lightweight Temporal Attention Encoder (LTAE) for spatio-temporal fusion of image
+    time series.
+    """
+
     def __init__(
         self,
-        inputs_dim,
-        encoder_widths,
-        decoder_widths,
-        out_conv,
-        str_conv_k,
-        str_conv_s,
-        str_conv_p,
-        agg_mode,
-        encoder_norm,
-        n_head,
-        d_model,
-        d_k,
-        pad_value,
-        padding_mode,
-        last_relue,
-    ):
-        """
-        U-TAE architecture for spatio-temporal encoding of satellite image time series.
+        inputs_dim: int,
+        encoder_widths: List[int],
+        decoder_widths: Optional[List[int]],
+        out_conv: List[int],
+        str_conv_k: int,
+        str_conv_s: int,
+        str_conv_p: int,
+        agg_mode: str,
+        encoder_norm: str,
+        n_head: int,
+        d_model: int,
+        d_k: int,
+        pad_value: float,
+        padding_mode: str,
+        last_relue: bool,
+    ) -> None:
+        """Build the U-TAE spatial encoder/decoder and temporal attention encoder.
+
         Args:
             inputs_dim (int): Number of channels in the input images.
-            encoder_widths (List[int]): List giving the number of channels of the successive encoder_widths of the convolutional encoder.
-            This argument also defines the number of encoder_widths (i.e. the number of downsampling steps +1)
-            in the architecture.
-            The number of channels are given from top to bottom, i.e. from the highest to the lowest resolution.
-            decoder_widths (List[int], optional): Same as encoder_widths but for the decoder. The order in which the number of
-            channels should be given is also from top to bottom. If this argument is not specified the decoder
-            will have the same configuration as the encoder.
-            out_conv (List[int]): Number of channels of the successive convolutions for the
+            encoder_widths (List[int]): Number of channels of the successive stages of the
+                convolutional encoder. This argument also defines the number of stages
+                (i.e. the number of downsampling steps + 1) in the architecture. The number
+                of channels are given from top to bottom, i.e. from the highest to the lowest
+                resolution.
+            decoder_widths (Optional[List[int]]): Same as `encoder_widths` but for the decoder.
+                The order in which the number of channels should be given is also from top to
+                bottom. If this argument is not specified, the decoder will have the same
+                configuration as the encoder.
+            out_conv (List[int]): Number of channels of the successive convolutions of the
+                final `ConvBlock`, applied after the decoder (prepended with `decoder_widths[0]`).
             str_conv_k (int): Kernel size of the strided up and down convolutions.
             str_conv_s (int): Stride of the strided up and down convolutions.
             str_conv_p (int): Padding of the strided up and down convolutions.
             agg_mode (str): Aggregation mode for the skip connections. Can either be:
-                - att_group (default) : Attention weighted temporal average, using the same
-                channel grouping strategy as in the LTAE. The attention masks are bilinearly
-                resampled to the resolution of the skipped feature maps.
-                - att_mean : Attention weighted temporal average,
-                 using the average attention scores across heads for each date.
-                - mean : Temporal average excluding padded dates.
-            encoder_norm (str): Type of normalisation layer to use in the encoding branch. Can either be:
-                - group : GroupNorm (default)
-                - batch : BatchNorm
-                - instance : InstanceNorm
+                - att_group (default): Attention weighted temporal average, using the same
+                  channel grouping strategy as in the LTAE. The attention masks are bilinearly
+                  resampled to the resolution of the skipped feature maps.
+                - att_mean: Attention weighted temporal average, using the average attention
+                  scores across heads for each date.
+                - mean: Temporal average excluding padded dates.
+            encoder_norm (str): Type of normalisation layer to use in the encoding branch. Can
+                either be:
+                - group: GroupNorm (default)
+                - batch: BatchNorm
+                - instance: InstanceNorm
             n_head (int): Number of heads in LTAE.
-            d_model (int): Parameter of LTAE
-            d_k (int): Key-Query space dimension
+            d_model (int): Parameter of LTAE.
+            d_k (int): Key-Query space dimension.
             pad_value (float): Value used by the dataloader for temporal padding.
-            padding_mode (str): Spatial padding strategy for convolutional layers (passed to nn.Conv2d).
+            padding_mode (str): Spatial padding strategy for convolutional layers (passed to
+                nn.Conv2d).
+            last_relue (bool): If True, applies a final ReLU activation in the output `ConvBlock`.
         """
         super(UTAE, self).__init__()
         self.n_stages = len(encoder_widths)
         self.encoder_widths = encoder_widths
         self.decoder_widths = decoder_widths
         self.last_relue = last_relue
-        self.enc_dim = (
-            decoder_widths[0] if decoder_widths is not None else encoder_widths[0]
-        )
-        self.stack_dim = (
-            sum(decoder_widths) if decoder_widths is not None else sum(encoder_widths)
-        )
+        self.enc_dim = decoder_widths[0] if decoder_widths is not None else encoder_widths[0]
+        self.stack_dim = sum(decoder_widths) if decoder_widths is not None else sum(encoder_widths)
         self.pad_value = pad_value
 
         if decoder_widths is not None:
@@ -122,13 +140,37 @@ class UTAE(nn.Module):
             d_k=d_k,
         )
         self.temporal_aggregator = Temporal_Aggregator(mode=agg_mode)
-        self.out_conv = ConvBlock(nkernels=[decoder_widths[0]] + out_conv, padding_mode=padding_mode, last_relu=self.last_relue)
+        self.out_conv = ConvBlock(
+            nkernels=[decoder_widths[0]] + out_conv,
+            padding_mode=padding_mode,
+            last_relu=self.last_relue,
+        )
 
-    def forward(self, inputs, labels=None, metadata=None, return_att=False):
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        return_att: bool = False,
+    ) -> torch.Tensor:
+        """Run the U-TAE forward pass.
+
+        Args:
+            inputs (torch.Tensor): Input tensor of shape (B, T, C, H, W), where padded
+                time steps are filled with `self.pad_value`.
+            labels (Optional[torch.Tensor]): Unused, kept for interface compatibility with
+                other regression models that require targets.
+            metadata (Optional[Dict[str, Any]]): Metadata dict containing "inputs_dates", the
+                batch of temporal positions used for the LTAE positional encoding.
+            return_att (bool): Currently unused; the temporal attention masks are not returned
+                by this method regardless of this flag.
+
+        Returns:
+            torch.Tensor: Output tensor produced by the final `ConvBlock`, at the same
+                spatial resolution as `inputs`.
+        """
         batch_positions = metadata["inputs_dates"]
-        pad_mask = (
-            (inputs == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
-        )  # BxT pad mask
+        pad_mask = (inputs == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)  # BxT pad mask
         out = self.in_conv.smart_forward(inputs)
         feature_maps = [out]
         # SPATIAL ENCODER
@@ -147,5 +189,3 @@ class UTAE(nn.Module):
             out = self.up_blocks[i](out, skip)
         out = self.out_conv(out)
         return out
-
-

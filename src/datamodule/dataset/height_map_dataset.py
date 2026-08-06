@@ -1,47 +1,81 @@
-from typing import Any
+"""Dataset for canopy height mapping, supporting both on-the-fly and pre-saved samples.
+
+Each sample pairs remote-sensing inputs (from a `get_inputs` callable) with height
+targets (from a `get_targets` callable), either computed on-the-fly and saved to disk
+("save" mode) or loaded from pre-saved safetensors files ("load" mode).
+"""
+
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import geopandas as gpd
 import numpy as np
 import torch
-from torch.utils.data import  Dataset
-from torchvision.transforms import v2
-from safetensors.torch import save_file
 from safetensors import safe_open
-from pathlib import Path
+from safetensors.torch import save_file
+from torch.utils.data import Dataset
+from torchvision.transforms import v2
 
 from src.datamodule.datamodule_utils import get_random_tensor_crop
-from src.global_utils import subdivide_bounds_gdf, expand_bounds_gdf, get_logger
+from src.global_utils import expand_bounds_gdf, get_logger, subdivide_bounds_gdf
 
 log = get_logger(__name__)
 
+
 class heightMapDataset(Dataset):
+    """Dataset producing (input, target, metadata) triplets for canopy height mapping.
+
+    Depending on `mode`, samples are either computed from raw inputs/targets and
+    written to disk as safetensors batches ("save" mode), or read back from those
+    pre-saved batches with optional data augmentation ("load" mode).
+    """
+
     def __init__(
         self,
-        resolution_input,
-        resolution_target,
-        patch_size_input,
-        patch_size_target,
-        gdf_path,
-        data_augmentation, 
-        get_inputs,
-        get_targets,
-        save_dir,
-        batch_size_save,
-        mode,
-        stage,
-    ):
+        resolution_input: float,
+        resolution_target: float,
+        patch_size_input: int,
+        patch_size_target: int,
+        gdf_path: str,
+        data_augmentation: bool,
+        get_inputs: Any,
+        get_targets: Any,
+        save_dir: str,
+        batch_size_save: int,
+        mode: str,
+        stage: str,
+    ) -> None:
+        """Initializes the dataset and prepares its GeoDataFrame of samples.
+
+        Args:
+            resolution_input: Spatial resolution (in meters) of the input images.
+            resolution_target: Spatial resolution (in meters) of the target images.
+            patch_size_input: Side length (in pixels) of the input patches.
+            patch_size_target: Side length (in pixels) of the target patches.
+            gdf_path: Path to the GeoDataFrame file describing the samples.
+            data_augmentation: Whether to apply random crop/rotation/mirror augmentation.
+            get_inputs: Callable object retrieving inputs for a given sample (e.g.
+                `getS1S2Timeseries` or `getS1S2Composites`).
+            get_targets: Callable object retrieving targets for a given sample (e.g.
+                `getLidarImages` or `getNan`).
+            save_dir: Directory where pre-saved tensors are written to/read from.
+            batch_size_save: Number of samples grouped together in each saved batch.
+            mode: Either "load" (read pre-saved tensors) or "save" (compute and save).
+            stage: Dataset stage/split, e.g. "train", "val", "test", or a "predict*" value.
+        """
         self.resolution_input = resolution_input
         self.resolution_target = resolution_target
         self.patch_size_input = patch_size_input
         self.patch_size_target = patch_size_target
-        self.patch_size_real = patch_size_input*resolution_input 
+        self.patch_size_real = patch_size_input * resolution_input
         self.data_augmentation = data_augmentation
-        
+
         self.gdf_path = gdf_path
         self.get_inputs = get_inputs
         self.get_targets = get_targets
         self.save_dir = Path(save_dir)
         self.batch_size_save = batch_size_save
-        self.mode = mode        
+        self.mode = mode
         self.stage = stage
         self.gdf = self.prepare_gdf()
 
@@ -51,78 +85,146 @@ class heightMapDataset(Dataset):
         self.set_mode(self.mode)
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def set_mode(self, mode):
+    def set_mode(self, mode: str) -> None:
+        """Switches the dataset between "load" and "save" mode.
+
+        Updates `self.get_item` and `self.collate_fn` to point to the implementations
+        matching the requested mode.
+
+        Args:
+            mode: Either "load" (read pre-saved tensors) or "save" (compute and save).
+        """
         self.mode = mode
         self.get_item = self._load_getitem if mode == "load" else self._save_getitem
         self.collate_fn = self._collate_fn_load if mode == "load" else self._collate_fn_save
 
-
-    def __len__(self):
+    def __len__(self) -> int:
+        """Returns the number of samples in the dataset."""
         return len(self.gdf)
-    
-    def prepare_gdf(self):
+
+    def prepare_gdf(self) -> gpd.GeoDataFrame:
+        """Loads and filters the GeoDataFrame of samples for the current stage.
+
+        Filters rows by split/stage, delegates input-specific filtering to
+        `get_inputs.prepare_gdf_for_inputs`, and, for prediction stages, expands or
+        subdivides the patch bounds with a margin. For the training split, rows can
+        also be repeated according to an optional "nb_repetitions" column.
+
+        Returns:
+            The prepared GeoDataFrame, with an added "initial_index" column.
+        """
         gdf = gpd.read_file(self.gdf_path)
 
-        if "predict" not in self.stage : #we predict on all patches of the gdf
-            gdf = gdf[gdf['split'] == self.stage ].reset_index(drop=True)   
+        if "predict" not in self.stage:  # we predict on all patches of the gdf
+            gdf = gdf[gdf["split"] == self.stage].reset_index(drop=True)
         if "predict" in self.stage and "test" in self.stage:
-            gdf = gdf[gdf['split'] == "test" ].reset_index(drop=True)   
+            gdf = gdf[gdf["split"] == "test"].reset_index(drop=True)
 
         gdf = self.get_inputs.prepare_gdf_for_inputs(gdf)
 
         gdf["initial_index"] = gdf.index
 
-        if "predict" in self.stage :
-            margin_size = int(self.patch_size_real / 12) # By convention, we use a margin of 1/12 of the patch size
-            
-            if "subdivide" in self.stage and not self.mode == "save": # case where we want to subdivide the gdf into subpatches
-                gdf = subdivide_bounds_gdf(gdf, patch_size=self.patch_size_real, margin_size=margin_size, resolution=self.resolution_input)
-            else: # case where we want to expand the bounds of the gdf with the margin 
-                gdf = expand_bounds_gdf(gdf, margin_size=margin_size, resolution=self.resolution_input)
-        
+        if "predict" in self.stage:
+            margin_size = int(
+                self.patch_size_real / 12
+            )  # By convention, we use a margin of 1/12 of the patch size
+
+            if (
+                "subdivide" in self.stage and not self.mode == "save"
+            ):  # case where we want to subdivide the gdf into subpatches
+                gdf = subdivide_bounds_gdf(
+                    gdf,
+                    patch_size=self.patch_size_real,
+                    margin_size=margin_size,
+                    resolution=self.resolution_input,
+                )
+            else:  # case where we want to expand the bounds of the gdf with the margin
+                gdf = expand_bounds_gdf(
+                    gdf, margin_size=margin_size, resolution=self.resolution_input
+                )
+
         if self.mode == "load" and self.stage == "train" and "nb_repetitions" in gdf.columns:
             gdf = gdf.loc[gdf.index.repeat(gdf["nb_repetitions"])].reset_index(drop=True)
-        
+
         log.info(f"Number of {self.stage} samples : {len(gdf)}")
         return gdf
 
-    def update_moments_transforms(self, input_mean, input_std, transform_input):
+    def update_moments_transforms(
+        self, input_mean: np.ndarray, input_std: np.ndarray, transform_input: Any
+    ) -> None:
+        """Updates the input normalization transform and moments used by `get_inputs`.
+
+        Args:
+            input_mean: Per-channel mean used for input normalization.
+            input_std: Per-channel standard deviation used for input normalization.
+            transform_input: Transform applied to raw inputs (includes normalization).
+        """
         self.transform_input = transform_input
-        
+
         self.get_inputs.mean = input_mean
         self.get_inputs.std = input_std
-        
-    def _dict_to_batch(self, dict_batch):
+
+    def _dict_to_batch(
+        self, dict_batch: List[Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+        """Stacks a list of (input, target, metadata) samples into a batch.
+
+        Args:
+            dict_batch: List of `(input, target, metadata)` triplets, where `metadata`
+                is a dict mapping keys to tensors.
+
+        Returns:
+            A tuple `(batch_input, batch_target, batch_metadata)`, where `batch_metadata`
+            maps each metadata key to a tensor stacked across the batch.
+        """
         inputs = [item[0] for item in dict_batch]
         targets = [item[1] for item in dict_batch]
         metadata = [item[2] for item in dict_batch]
         batch_input = torch.stack(inputs, dim=0)
         batch_target = torch.stack(targets, dim=0)
 
-        batch_metadata = {key: torch.stack([d[key] for d in metadata], dim=0) for key in metadata[0]}
+        batch_metadata = {
+            key: torch.stack([d[key] for d in metadata], dim=0) for key in metadata[0]
+        }
 
         return batch_input, batch_target, batch_metadata
-        
-    def _save_getitem(self, ix):
+
+    def _save_getitem(
+        self, ix: int
+    ) -> Union[
+        Tuple[None, None, None], Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]
+    ]:
+        """Computes a single sample and gathers it for later saving to disk.
+
+        Args:
+            ix: Row index in `self.gdf`.
+
+        Returns:
+            A `(inputs, targets, metadata)` triplet, or `(None, None, None)` if the
+            safetensors batch containing this index has already been saved.
+        """
 
         idx_batch = ix // self.batch_size_save
         if (self.save_dir / f"batch_{idx_batch}.safetensors").exists():
             return None, None, None
-        
+
         row_gdf = self.gdf.loc[ix]
         bounds = list(row_gdf["geometry"].bounds)
 
-        #Bottom Left crop, else we save the full patch
-        if not self.data_augmentation and "predict" not in self.stage: 
-            bounds[2], bounds[3] = bounds[0] + self.patch_size_real, bounds[1] + self.patch_size_real
-        
+        # Bottom Left crop, else we save the full patch
+        if not self.data_augmentation and "predict" not in self.stage:
+            bounds[2], bounds[3] = (
+                bounds[0] + self.patch_size_real,
+                bounds[1] + self.patch_size_real,
+            )
+
         inputs, metadata_inputs = self.get_inputs(bounds, row_gdf, self.transform_input)
-        targets, metadata_targets = self.get_targets(bounds, row_gdf, self.transform_target)  
-        
+        targets, metadata_targets = self.get_targets(bounds, row_gdf, self.transform_target)
+
         metadata = {}
-        for key, value in metadata_inputs.items() :
+        for key, value in metadata_inputs.items():
             metadata[key] = value
-        for key, value in metadata_targets.items() :
+        for key, value in metadata_targets.items():
             metadata[key] = value
 
         metadata["row_idx"] = torch.tensor([ix])
@@ -130,25 +232,40 @@ class heightMapDataset(Dataset):
 
         return inputs, targets, metadata
 
-    def _collate_fn_save(self, batch):
+    def _collate_fn_save(
+        self,
+        batch: List[
+            Tuple[
+                Optional[torch.Tensor], Optional[torch.Tensor], Optional[Dict[str, torch.Tensor]]
+            ]
+        ],
+    ) -> None:
+        """Collates a batch of computed samples and writes it to a safetensors file.
+
+        Skips saving if the batch is a placeholder (i.e. already saved). The batch is
+        first written to a temporary file, then atomically renamed to its final path.
+
+        Args:
+            batch: List of `(inputs, targets, metadata)` triplets from `_save_getitem`.
+
+        Raises:
+            ValueError: If the batch's row indices are not consecutive.
+        """
 
         if batch[0][0] is None:
             return
-        
+
         batch_input, batch_target, batch_metadata = self._dict_to_batch(batch)
         ix = list(batch_metadata["row_idx"])
-        
-        #Check if the indices are consecutive
+
+        # Check if the indices are consecutive
         for i in range(1, len(ix)):
             if ix[i] != ix[i - 1] + 1:
                 raise ValueError(f"Batch indices not consecutive: {ix[i-1]} followed by {ix[i]}")
 
-        idx_batch = ix[-1].item()//self.batch_size_save
+        idx_batch = ix[-1].item() // self.batch_size_save
 
-        tensors_dict = {
-            "inputs": batch_input,
-            "targets": batch_target
-        }
+        tensors_dict = {"inputs": batch_input, "targets": batch_target}
         for k, v in batch_metadata.items():
             tensors_dict[f"meta_{k}"] = v
 
@@ -159,110 +276,187 @@ class heightMapDataset(Dataset):
         # Remove the temporary file if it exists
         if tmp_path.exists():
             tmp_path.unlink()
-        
+
         # Save the tensors to the temporary file
         save_file(tensors_dict, tmp_path)
 
         # Rename the temporary file to the final path
         tmp_path.rename(final_path)
 
+    def _load_getitem(self, ix: int) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+        """Loads a single sample from its pre-saved safetensors batch.
 
-    def _load_getitem(self, ix):
+        Applies random crop, rotation, and mirror augmentation when
+        `self.data_augmentation` is set (train/val/test stages), or crops around the
+        subdivided patch bounds for "predict*subdivide*" stages.
+
+        Args:
+            ix: Row index in `self.gdf`.
+
+        Returns:
+            A `(inputs, targets, metadata)` triplet, with `metadata["bounds"]` updated
+            to reflect the (possibly cropped) sample bounds.
+
+        Raises:
+            ValueError: If the stored input tensor has an unsupported number of dims.
+        """
 
         row_gdf = self.gdf.loc[ix]
-        idx_save = row_gdf["initial_index"] 
+        idx_save = row_gdf["initial_index"]
 
         ix_batch = idx_save // self.batch_size_save
         path = self.save_dir / f"batch_{ix_batch}.safetensors"
-        
+
         ix_in_batch = idx_save % self.batch_size_save
-        
+
         bounds = list(row_gdf["geometry"].bounds)
 
         metadata = {}
         with safe_open(path, framework="pt", device="cpu") as f:
             inputs_slice_obj = f.get_slice("inputs")
             targets_slice_obj = f.get_slice("targets")
-            
+
             for k in f.keys():
                 if k.startswith("meta_"):
                     key_name = k.replace("meta_", "", 1)
                     metadata[key_name] = f.get_slice(k)[ix_in_batch]
 
-            # Case only for train, test, and val 
+            # Case only for train, test, and val
             if "predict" not in self.stage:
-                if self.data_augmentation : # case where we do data augmentation in training mode         
+                if self.data_augmentation:  # case where we do data augmentation in training mode
                     # get random crop
                     input_shape = metadata["input_shape"]
                     crop_tensor_input = get_random_tensor_crop(input_shape, self.patch_size_input)
                     factor_inputs_to_targets = self.patch_size_target / self.patch_size_input
-                    crop_tensor_target = [int(position * factor_inputs_to_targets) for position in crop_tensor_input]
-                    if len(input_shape) == 3: #shape CHW
-                        inputs = inputs_slice_obj[ix_in_batch, :, crop_tensor_input[1]:crop_tensor_input[3], crop_tensor_input[0]:crop_tensor_input[2]]
-                    elif len(input_shape) == 4: #shape TCHW
-                        inputs = inputs_slice_obj[ix_in_batch, :, :, crop_tensor_input[1]:crop_tensor_input[3], crop_tensor_input[0]:crop_tensor_input[2]]
+                    crop_tensor_target = [
+                        int(position * factor_inputs_to_targets) for position in crop_tensor_input
+                    ]
+                    if len(input_shape) == 3:  # shape CHW
+                        inputs = inputs_slice_obj[
+                            ix_in_batch,
+                            :,
+                            crop_tensor_input[1] : crop_tensor_input[3],
+                            crop_tensor_input[0] : crop_tensor_input[2],
+                        ]
+                    elif len(input_shape) == 4:  # shape TCHW
+                        inputs = inputs_slice_obj[
+                            ix_in_batch,
+                            :,
+                            :,
+                            crop_tensor_input[1] : crop_tensor_input[3],
+                            crop_tensor_input[0] : crop_tensor_input[2],
+                        ]
                     else:
                         raise ValueError(f"Input shape {input_shape} not supported")
 
-                    targets = targets_slice_obj[ix_in_batch, :, crop_tensor_target[1]:crop_tensor_target[3], crop_tensor_target[0]:crop_tensor_target[2]]
+                    targets = targets_slice_obj[
+                        ix_in_batch,
+                        :,
+                        crop_tensor_target[1] : crop_tensor_target[3],
+                        crop_tensor_target[0] : crop_tensor_target[2],
+                    ]
 
                     # get random rotation
-                    rotation = np.random.randint(0,4)
-                    if rotation > 0 :
+                    rotation = np.random.randint(0, 4)
+                    if rotation > 0:
                         inputs = torch.rot90(inputs, k=rotation, dims=(-1, -2))
                         targets = torch.rot90(targets, k=rotation, dims=(-1, -2))
-                    
+
                     # get random mirror
-                    mirror = np.random.randint(0,3)
-                    if mirror > 0 :
-                        inputs = torch.flip(inputs, dims=[-mirror])  
-                        targets = torch.flip(targets, dims=[-mirror]) 
-                
+                    mirror = np.random.randint(0, 3)
+                    if mirror > 0:
+                        inputs = torch.flip(inputs, dims=[-mirror])
+                        targets = torch.flip(targets, dims=[-mirror])
+
                     # update the bounds to the crop
                     bounds[0] += crop_tensor_input[0] * self.resolution_input
                     bounds[1] += crop_tensor_input[1] * self.resolution_input
                     bounds[2] = bounds[0] + self.patch_size_real
                     bounds[3] = bounds[1] + self.patch_size_real
-                else : 
+                else:
                     bounds[2] = bounds[0] + self.patch_size_real
                     bounds[3] = bounds[1] + self.patch_size_real
-                    inputs = inputs_slice_obj[ix_in_batch] # already cropped in bottom left corner, just need to get the slice
+                    inputs = inputs_slice_obj[
+                        ix_in_batch
+                    ]  # already cropped in bottom left corner, just need to get the slice
                     targets = targets_slice_obj[ix_in_batch]
-            
+
             # Case predict on subdivided patches
-            elif "subdivide" in self.stage: 
-                
-                #get the crop tensor for the input
+            elif "subdivide" in self.stage:
+
+                # get the crop tensor for the input
                 input_shape = metadata["input_shape"]
                 global_bounds = row_gdf["patch_bounds"]
                 offset_x = int((bounds[0] - global_bounds[0]) / self.resolution_input)
                 offset_y = int((global_bounds[3] - bounds[3]) / self.resolution_input)
-                crop_tensor_input = [offset_x, offset_y, offset_x + self.patch_size_input, offset_y + self.patch_size_input]
+                crop_tensor_input = [
+                    offset_x,
+                    offset_y,
+                    offset_x + self.patch_size_input,
+                    offset_y + self.patch_size_input,
+                ]
 
-                if len(input_shape) == 3: #shape CHW
-                     inputs = inputs_slice_obj[ix_in_batch, :, crop_tensor_input[1]:crop_tensor_input[3], crop_tensor_input[0]:crop_tensor_input[2]]
-                elif len(input_shape) == 4: #shape TCHW
-                    inputs = inputs_slice_obj[ix_in_batch, :, :, crop_tensor_input[1]:crop_tensor_input[3], crop_tensor_input[0]:crop_tensor_input[2]]
+                if len(input_shape) == 3:  # shape CHW
+                    inputs = inputs_slice_obj[
+                        ix_in_batch,
+                        :,
+                        crop_tensor_input[1] : crop_tensor_input[3],
+                        crop_tensor_input[0] : crop_tensor_input[2],
+                    ]
+                elif len(input_shape) == 4:  # shape TCHW
+                    inputs = inputs_slice_obj[
+                        ix_in_batch,
+                        :,
+                        :,
+                        crop_tensor_input[1] : crop_tensor_input[3],
+                        crop_tensor_input[0] : crop_tensor_input[2],
+                    ]
                 else:
                     raise ValueError(f"Input shape {input_shape} not supported")
 
                 targets = torch.tensor(torch.nan)
 
             # Case predict on full patches
-            else : 
+            else:
                 inputs = inputs_slice_obj[ix_in_batch]
                 targets = targets_slice_obj[ix_in_batch]
-                
+
         metadata["bounds"] = torch.tensor(bounds)
         return inputs, targets, metadata
 
-    def _collate_fn_load(self, batch):
+    def _collate_fn_load(
+        self, batch: List[Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+        """Collates a batch of loaded samples into stacked tensors.
+
+        Args:
+            batch: List of `(inputs, targets, metadata)` triplets from `_load_getitem`.
+
+        Returns:
+            A `(batch_input, batch_target, batch_metadata)` tuple.
+        """
         batch_input, batch_target, batch_metadata = self._dict_to_batch(batch)
         return batch_input, batch_target, batch_metadata
-    
-    def __getitem__(self, ix):
+
+    def __getitem__(self, ix: int) -> Any:
+        """Returns a single sample using the getter matching the current mode.
+
+        Args:
+            ix: Row index in `self.gdf`.
+
+        Returns:
+            The sample as returned by `_load_getitem` or `_save_getitem`, depending
+            on the current mode.
+        """
         return self.get_item(ix)
 
-    def __collate_fn__(self, batch):
+    def __collate_fn__(self, batch: List[Any]) -> Any:
+        """Collates a batch using the collate function matching the current mode.
+
+        Args:
+            batch: List of samples as produced by `__getitem__`.
+
+        Returns:
+            The collated batch, as returned by `_collate_fn_load` or `_collate_fn_save`.
+        """
         return self.collate_fn(batch)
-    

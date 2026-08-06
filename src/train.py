@@ -1,13 +1,31 @@
+"""Entry point for training a SERA-H model with Hydra-configured Lightning components."""
+
+from typing import Optional
+
 import hydra
-from omegaconf import DictConfig, OmegaConf
 import torch
 from lightning import seed_everything
+from omegaconf import DictConfig, OmegaConf
+
 from src import global_utils as utils
 
 log = utils.get_logger(__name__)
 
+
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config")
-def train(config: DictConfig) :
+def train(config: DictConfig) -> Optional[torch.Tensor]:
+    """Instantiate the datamodule, module and trainer from the Hydra config and run training.
+
+    Optionally resumes from a checkpoint (either full training state or just the model
+    weights) and returns the optimized metric for hyperparameter search, if configured.
+
+    Args:
+        config (DictConfig): Hydra configuration composed from the config group.
+
+    Returns:
+        Optional[torch.Tensor]: Value of the optimized metric after training, if
+        `config.optimized_metric` is set; otherwise `None`.
+    """
 
     if config.get("print_config"):
         utils.print_config(config, resolve=True)
@@ -45,18 +63,19 @@ def train(config: DictConfig) :
 
     # Init lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    trainer = hydra.utils.instantiate(
-        config.trainer, callbacks=callbacks, logger=logger)
-        
+    trainer = hydra.utils.instantiate(config.trainer, callbacks=callbacks, logger=logger)
+
     # Train the model
     ckpt_path = config.get("ckpt_path", None)
     if ckpt_path is not None and ckpt_path != "last":
-        if config.get("load_just_weights", False) :
+        if config.get("load_just_weights", False):
             log.info(f"Start of training from checkpoint {ckpt_path} using only the weights !")
             checkpoint = torch.load(ckpt_path, map_location="cpu")
 
             if "state_dict" in checkpoint:
-                missing_keys, unexpected_keys = module.load_state_dict(checkpoint['state_dict'], strict=False)
+                missing_keys, unexpected_keys = module.load_state_dict(
+                    checkpoint["state_dict"], strict=False
+                )
             else:
                 missing_keys, unexpected_keys = module.load_state_dict(checkpoint, strict=False)
 
@@ -65,17 +84,17 @@ def train(config: DictConfig) :
 
             ckpt_path = None
 
-        else :
+        else:
             log.info(f"Start of training from checkpoint {ckpt_path} !")
 
-    elif ckpt_path == "last" :
+    elif ckpt_path == "last":
         log.info(f"Starting training from last checkpoint {ckpt_path} !")
 
-    else :
+    else:
         log.info("Starting training from scratch!")
-    
+
     trainer.fit(model=module, datamodule=datamodule, ckpt_path=ckpt_path)
-   
+
     # Print path to best checkpoint
     log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
 
@@ -85,6 +104,7 @@ def train(config: DictConfig) :
         return trainer.callback_metrics[optimized_metric]
 
     return None
+
 
 if __name__ == "__main__":
     train()

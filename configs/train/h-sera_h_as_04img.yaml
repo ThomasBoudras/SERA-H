@@ -3,12 +3,11 @@
 project: "train_sera"
 run_name: h-sera_h_as_04img
 run_version: vx_${run_name}
-data_dir: data/
 ckpt_path: last
 
 datamodule:
     instance:
-        batch_size: 8  
+        batch_size: 8
     dataset:
         patch_size_input: 32
         patch_size_target: 128

@@ -29,4 +29,4 @@ instance:
   test_metrics: ${module.metrics.test_metrics}
   optimizer: ${module.optimizer}
   scheduler: ${module.scheduler}
-  predictions_save_dir : ${log_dir}/predictions
+  predictions_save_dir: ${log_dir}/predictions

@@ -3,7 +3,6 @@
 project: "train_sera"
 run_name: h-sera_h_as_16img
 run_version: vx_${run_name}
-data_dir: data/
 ckpt_path: last
 
 datamodule:

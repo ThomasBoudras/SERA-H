@@ -1,25 +1,25 @@
 defaults:
-  - metrics_calculator : height_map_metrics
+  - metrics_calculator: height_map_metrics
 
 
-ign_forest_mask_path : ${data_dir}/open_canopy/forest_mask.parquet
-lidarhd_classification_mask_path : ${data_dir}/open_canopy/
-classes_to_keep : [5]
+ign_forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+lidarhd_classification_mask_path: ${data_dir}/open_canopy/
+classes_to_keep: [5]
 
 train_metrics: null
 
 val_metrics:
   _target_: src.module.metrics.masked_forest_metrics.maskedForestMetrics
-  metrics_calculator : ${module.metrics.metrics_calculator}
-  ign_forest_mask_path : null #forest map is too long to clip, we don't keep for validation  
-  lidarhd_classification_mask_path : ${module.metrics.lidarhd_classification_mask_path}
-  classes_to_keep : ${module.metrics.classes_to_keep}
-  resolution_target : ${datamodule.dataset.resolution_target}
+  metrics_calculator: ${module.metrics.metrics_calculator}
+  ign_forest_mask_path: null #forest map is too long to clip, we don't keep for validation
+  lidarhd_classification_mask_path: ${module.metrics.lidarhd_classification_mask_path}
+  classes_to_keep: ${module.metrics.classes_to_keep}
+  resolution_target: ${datamodule.dataset.resolution_target}
 
 test_metrics:
   _target_: src.module.metrics.masked_forest_metrics.maskedForestMetrics
-  metrics_calculator : ${module.metrics.metrics_calculator}
-  ign_forest_mask_path : ${module.metrics.ign_forest_mask_path}
-  lidarhd_classification_mask_path : ${module.metrics.lidarhd_classification_mask_path}
-  classes_to_keep : ${module.metrics.classes_to_keep}
-  resolution_target : ${datamodule.dataset.resolution_target}
+  metrics_calculator: ${module.metrics.metrics_calculator}
+  ign_forest_mask_path: ${module.metrics.ign_forest_mask_path}
+  lidarhd_classification_mask_path: ${module.metrics.lidarhd_classification_mask_path}
+  classes_to_keep: ${module.metrics.classes_to_keep}
+  resolution_target: ${datamodule.dataset.resolution_target}

@@ -1,6 +1,6 @@
-defaults :
-  - get_inputs : s1_s2_timeseries
-  - get_targets : lidar
+defaults:
+  - get_inputs: s1_s2_timeseries
+  - get_targets: lidar
 
 gdf_path: ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
 save_dir: ${data_dir}/saved_tensors/timeseries/height_map/${run_name}/${run_version}/
@@ -10,16 +10,16 @@ resolution_target: 2.5
 patch_size_input: 64
 patch_size_target: 256
 
-train_dataset: 
+train_dataset:
   _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
-  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_input: ${datamodule.dataset.resolution_input}
   resolution_target: ${datamodule.dataset.resolution_target}
   patch_size_input: ${datamodule.dataset.patch_size_input}
   patch_size_target: ${datamodule.dataset.patch_size_target}
   gdf_path: ${datamodule.dataset.gdf_path}
-  data_augmentation : True
-  get_inputs :  ${datamodule.dataset.get_inputs}
-  get_targets : ${datamodule.dataset.get_targets}
+  data_augmentation: True
+  get_inputs:  ${datamodule.dataset.get_inputs}
+  get_targets: ${datamodule.dataset.get_targets}
   save_dir: ${datamodule.dataset.save_dir}/train
   batch_size_save: ${datamodule.dataset.batch_size_save}
   mode: ${datamodule.instance.mode}
@@ -27,14 +27,14 @@ train_dataset:
 
 val_dataset:
   _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
-  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_input: ${datamodule.dataset.resolution_input}
   resolution_target: ${datamodule.dataset.resolution_target}
   patch_size_input: ${datamodule.dataset.patch_size_input}
   patch_size_target: ${datamodule.dataset.patch_size_target}
   gdf_path: ${datamodule.dataset.gdf_path}
-  data_augmentation : False
-  get_inputs :  ${datamodule.dataset.get_inputs}
-  get_targets : ${datamodule.dataset.get_targets}
+  data_augmentation: False
+  get_inputs:  ${datamodule.dataset.get_inputs}
+  get_targets: ${datamodule.dataset.get_targets}
   save_dir: ${datamodule.dataset.save_dir}/val
   batch_size_save: ${datamodule.dataset.batch_size_save}
   mode: ${datamodule.instance.mode}
@@ -42,14 +42,14 @@ val_dataset:
 
 test_dataset:
   _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
-  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_input: ${datamodule.dataset.resolution_input}
   resolution_target: ${datamodule.dataset.resolution_target}
   patch_size_input: ${datamodule.dataset.patch_size_input}
   patch_size_target: ${datamodule.dataset.patch_size_target}
   gdf_path: ${datamodule.dataset.gdf_path}
-  data_augmentation : False
-  get_inputs :  ${datamodule.dataset.get_inputs}
-  get_targets : ${datamodule.dataset.get_targets}
+  data_augmentation: False
+  get_inputs:  ${datamodule.dataset.get_inputs}
+  get_targets: ${datamodule.dataset.get_targets}
   save_dir: ${datamodule.dataset.save_dir}/test
   batch_size_save: ${datamodule.dataset.batch_size_save}
   mode: ${datamodule.instance.mode}
@@ -57,18 +57,18 @@ test_dataset:
 
 predict_dataset:
   _target_: src.datamodule.dataset.height_map_dataset.heightMapDataset
-  resolution_input: ${datamodule.dataset.resolution_input}  
+  resolution_input: ${datamodule.dataset.resolution_input}
   resolution_target: ${datamodule.dataset.resolution_target}
   patch_size_input: ${datamodule.dataset.patch_size_input}
   patch_size_target: ${datamodule.dataset.patch_size_target}
   gdf_path: ${datamodule.dataset.gdf_path}
-  data_augmentation : False
-  get_inputs :  ${datamodule.dataset.get_inputs}
-  get_targets : 
+  data_augmentation: False
+  get_inputs:  ${datamodule.dataset.get_inputs}
+  get_targets:
     _target_: src.datamodule.dataset.get_targets.nan.getNan
     date_column: null
   batch_size_save: ${datamodule.dataset.batch_size_save}
   mode: ${datamodule.instance.mode}
   stage: predict_test_subdivide
   save_dir: ${datamodule.dataset.save_dir}/${datamodule.dataset.predict_dataset.stage}
-  
+

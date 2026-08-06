@@ -1,13 +1,13 @@
 defaults:
     - h-individual_metrics_defaults
 
-model : h-fogel2025
+model: h-fogel2025
 
-get_images : 
+get_images:
   image_loaded_set:
-    height_pred : 
+    height_pred:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/fogel2025/<year>/pred.vrt
+      path: data/fogel2025/<year>/pred.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1

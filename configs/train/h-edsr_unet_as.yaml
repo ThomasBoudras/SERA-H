@@ -8,11 +8,10 @@ defaults:
 project: "train_sera"
 run_name: h-edsr_unet_as
 run_version: vx_${run_name}
-data_dir: data/
 ckpt_path: last
 
 module:
-    super_resolution_model: 
+    super_resolution_model:
         input_type: COMPOSITES
 
 datamodule:

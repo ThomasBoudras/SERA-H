@@ -46,7 +46,7 @@ get_images:
       channel_to_keep: [2, 1, 0]
       grouping_dates: ${grouping_dates}
 
-    height_target : 
+    height_target:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
       path: ${data_dir}/open_canopy/<year>/lidar.vrt
       resolution: ${resolution}
@@ -59,9 +59,9 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    height_pred_pauls : 
+    height_pred_pauls:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/paul2025/<year>/paul2025/full.vrt
+      path: data/sota/paul2025/<year>/paul2025/full.vrt
       resolution: ${resolution}
       resampling_method: bilinear
       scaling_factor: 0.01
@@ -72,9 +72,9 @@ get_images:
       min_date: 20210101
       grouping_dates: ${grouping_dates}
 
-    height_pred_schwartz : 
+    height_pred_schwartz:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/schwartz2025/<year>/full.vrt
+      path: data/sota/schwartz2025/<year>/full.vrt
       resolution: ${resolution}
       resampling_method: bilinear
       scaling_factor: 0.01
@@ -85,9 +85,9 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    height_pred_open_canopy : 
+    height_pred_open_canopy:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/open_canopy/<year>/pred.vrt
+      path: data/open_canopy/<year>/pred.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1
@@ -98,9 +98,9 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    height_pred_liu : 
+    height_pred_liu:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/liu2023/liu2023/full.vrt
+      path: data/sota/liu2023/liu2023/full.vrt
       resolution: ${resolution}
       resampling_method: ${resampling_method_liu}
       scaling_factor: 1
@@ -111,7 +111,7 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    height_pred_sera : 
+    height_pred_sera:
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
       path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
       resolution: ${resolution}

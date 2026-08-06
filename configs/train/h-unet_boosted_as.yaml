@@ -9,7 +9,6 @@ defaults:
 project: "train_sera"
 run_name: h-unet_boosted_as
 run_version: vx_${run_name}
-data_dir: data/
 ckpt_path: last
 
 module:
