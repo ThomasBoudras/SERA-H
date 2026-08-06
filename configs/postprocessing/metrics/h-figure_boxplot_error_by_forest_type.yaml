@@ -1,0 +1,195 @@
+# @package _global_
+model: h-figure_boxplot_error_by_forest_type
+
+# General settings
+min_height: 0
+max_height: 50
+resolution: 2.5 
+nb_jobs: 10
+seed: 12345
+date_column: lidar_acquisition_date
+print_config: True
+nb_samples: 5000
+
+# Paths and directories
+data_dir: data/
+save_dir: ${data_dir}/logs/metrics/height_map/${model}
+grouping_dates: lidar_acquisition_date
+version_prediction: test_height_map
+version_metrics: test_height_map
+
+resampling_method_liu: bilinear
+
+# Geometries from a base run to ensure comparison on same areas
+geometries_path: ${data_dir}/logs/pred_sera/h-sera_h_max/test_height_map/predictions/predict_gdf.geojson
+
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir: hydra_logs
+
+# 1. Load ground truth and all prediction maps
+get_images: 
+  _target_: src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:    
+    height_target: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # Predictions to compare
+    pred_fogel2025: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path : data/open_canopy/<year>/pred.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    pred_sera_h: 
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h_max/${version_prediction}/predictions/data/h-sera_h_max_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+      
+    deciduous_mask:
+      _target_: src.postprocessing.metrics.get_images_utils.type_forest_mask_loader
+      ign_forest_mask_path: ${data_dir}/utils/BD_Foret_France_simp1m.gpkg
+      resolution: ${resolution}
+      type_forest: deciduous
+    coniferous_mask:
+      _target_: src.postprocessing.metrics.get_images_utils.type_forest_mask_loader
+      ign_forest_mask_path: ${data_dir}/utils/BD_Foret_France_simp1m.gpkg
+      resolution: ${resolution}
+      type_forest: coniferous
+
+    mixed_mask:
+      _target_: src.postprocessing.metrics.get_images_utils.type_forest_mask_loader
+      ign_forest_mask_path: ${data_dir}/utils/BD_Foret_France_simp1m.gpkg
+      resolution: ${resolution}
+      type_forest: mixed
+
+  image_computed_set:
+    masked_height_sera_deciduous :
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_sera_h
+      mask_name: deciduous_mask
+
+    masked_height_sera_coniferous:
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_sera_h
+      mask_name: coniferous_mask
+
+    masked_height_sera_mixed:
+      _target_: src.postprocessing.metrics.get_images_utils.masked_image_computer
+      input_name: pred_sera_h
+      mask_name: mixed_mask
+
+# 2. Compute local metrics (pemr patch/geometry) for each prediction
+get_metrics_local: 
+  _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set:
+    bins_error_sera_h_deciduous:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_sera_deciduous
+      name_target: height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_sera_h_coniferous:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_sera_coniferous
+      name_target: height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+    bins_error_sera_h_mixed:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.group_by_bins_local_computer
+      name_pred: masked_height_sera_mixed
+      name_target: height_target
+      bins: [0, 2, 10, 15, 20, 30, 40]
+      method_metrics: error
+
+# 3. Aggregate local metrics into global metrics (lists of errors for boxplots)
+get_metrics_global: 
+  _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_save: null
+  output_path_xlsx: null
+  metrics_set:
+    bins_tuples_error_sera_h_deciduous:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_sera_h_deciduous
+
+    bins_tuples_error_sera_h_coniferous:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_sera_h_coniferous
+
+    bins_tuples_error_sera_h_mixed:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer
+      name_metric: bins_error_sera_h_mixed
+
+get_plots_local: null
+
+# 4. Generate the final plot
+get_plots_global: 
+  _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
+  save_dir: ${save_dir}/${version_metrics}_figures
+  model_name: "error_distribution_by_forest_type"
+  metrics_to_save: all
+  output_path_xlsx : ${save_dir}/plots_metrics_${model}.xlsx
+  plot_set:
+    error_distribution_plot:
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 1
+      nb_col: 1
+      size_plot_width: 10
+      size_plot_height: 5.5
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null # The image doesn't have a title, only a figure caption
+          rowspan: 1
+          colspan: 1
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_boxplot_by_bins
+            metrics_list: [
+              bins_tuples_error_sera_h_coniferous,
+              bins_tuples_error_sera_h_deciduous,
+              bins_tuples_error_sera_h_mixed
+            ]
+            max_points_per_bin: null
+            # Use one of the metrics for proportion calculation, they should all be based on the same binned target data
+            proportion_metric: [
+              bins_tuples_error_sera_h_coniferous,
+              bins_tuples_error_sera_h_deciduous,
+              bins_tuples_error_sera_h_mixed
+            ] 
+            legend_labels: ["Coniferous", "Deciduous", "Mixed"]
+            bins: ["0-2m", "2-10m", "10-15m", "15-20m", "20-30m", "30-40m"]
+            x_label: "Ground truth height"
+            y_label: "Error (in m)"
+            colors: ["#2E86C1", "#FF5733", "#17BEBB"] 
+            y_min: -25
+            y_max: 25
+            legends_and_labels_shown: True

@@ -1,5 +1,5 @@
 # @package _global_
-model: h-figure_boxplot_error_by_height
+model: h-figure_boxplot_error
 
 # General settings
 min_height: 0
@@ -7,13 +7,13 @@ max_height: 50
 resolution: 2.5 
 nb_jobs: 10
 seed: 12345
+date_column: lidar_acquisition_date
 print_config: True
-n_samples: 5000
+nb_samples: 5000
 
 # Paths and directories
 data_dir: data/
 save_dir: ${data_dir}/logs/metrics/height_map/${model}
-output_path_xlsx: ${save_dir}/metrics_${model}.xlsx
 grouping_dates: lidar_acquisition_date
 version_prediction: test_height_map
 version_metrics: test_height_map
@@ -21,7 +21,7 @@ version_metrics: test_height_map
 resampling_method_liu: bilinear
 
 # Geometries from a base run to ensure comparison on same areas
-geometries_path: ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+geometries_path: ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
 
 hydra:
   run:
@@ -48,7 +48,7 @@ get_images:
     # Predictions to compare
     pred_fogel2025: 
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/fogel2025/<year>/pred.vrt
+      path : data/open_canopy/<year>/pred.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1
@@ -61,7 +61,7 @@ get_images:
 
     pred_sera_h: 
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      path: ${data_dir}/logs/pred_sera/h-sera_h_max/${version_prediction}/predictions/data/h-sera_h_max_full.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1
@@ -222,7 +222,8 @@ get_metrics_local:
 # 3. Aggregate local metrics into global metrics (lists of errors for boxplots)
 get_metrics_global: 
   _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
-  metrics_to_print: [] # Don't print stats, just plot
+  metrics_to_save: null # Don't print stats, just plot
+  output_path_xlsx: null
   metrics_set:
     bins_tuples_error_fogel2025:
       _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer

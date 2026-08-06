@@ -1,14 +1,15 @@
 # @package _global_
 
-model: h-figure_qualitative
+model: h-figure_qualitative_appendix
 min_height: 0
 max_height: 40
 resolution: 2.5
 nb_jobs: 1
 seed: 12345
+date_column: lidar_acquisition_date
 print_config: True
-nb_plots: 4
-nb_samples: 4
+nb_plots: 15
+nb_samples: 15
 version_prediction: test_height_map
 version_metrics: test_height_map
 
@@ -18,7 +19,7 @@ data_dir: data/
 save_dir: ${data_dir}/logs/metrics/height_map/${model}
 grouping_dates: lidar_acquisition_date
 
-geometries_path: ${data_dir}/utils/figure_qualitative_gdf.geojson
+geometries_path: ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
 hydra:
   run:
     dir: ${save_dir}
@@ -38,7 +39,7 @@ get_images:
 
     sentinel_rgb:
       _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
-      path: ${data_dir}/sentinel/composites/height_map/s2/s2.vrt
+      path: ${data_dir}/sentinel/timeseries/height_map/lidar_date_<date>/s2/s2_vrts
       resolution: 10
       resampling_method: bilinear
       open_even_oob: True
@@ -84,9 +85,9 @@ get_images:
       min_date: null
       grouping_dates: ${grouping_dates}
 
-    height_pred_fogel : 
+    height_pred_open_canopy : 
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path : data/sota/fogel2025/<year>/pred.vrt
+      path : data/open_canopy/<year>/pred.vrt
       resolution: ${resolution}
       resampling_method: max
       scaling_factor: 1
@@ -200,7 +201,7 @@ get_plots_local:
           grouping_dates: ${grouping_dates}
           method_graph:
             _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
-            image_name: height_pred_fogel
+            image_name: height_pred_open_canopy
             real_patch_size: 250
             resolution: ${resolution}
             cmap: magma
@@ -319,7 +320,7 @@ get_plots_local:
           grouping_dates: ${grouping_dates}
           method_graph:
             _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
-            image_name: height_pred_fogel
+            image_name: height_pred_open_canopy
             real_patch_size: 500
             resolution: ${resolution}
             cmap: magma
@@ -438,7 +439,7 @@ get_plots_local:
           grouping_dates: ${grouping_dates}
           method_graph:
             _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
-            image_name: height_pred_fogel
+            image_name: height_pred_open_canopy
             real_patch_size: 750
             resolution: ${resolution}
             cmap: magma
@@ -557,7 +558,7 @@ get_plots_local:
           grouping_dates: ${grouping_dates}
           method_graph:
             _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
-            image_name: height_pred_fogel
+            image_name: height_pred_open_canopy
             real_patch_size: 1000
             resolution: ${resolution}
             cmap: magma

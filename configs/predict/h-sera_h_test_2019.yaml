@@ -1,26 +1,29 @@
 # @package _global_
 
 defaults:
-  - override /train: h-sera_h_as_02img
+  - override /train: h-sera_h
   - _self_
 
 project : "pred_sera"
+run_name: h-sera_h_test_2019
 run_version: test_height_map
 
 ckpt_path : ${data_dir}/logs/train_sera/${run_name}/vx_${run_name}/best_checkpoints/epoch_xxx.ckpt
 load_just_weights: True
 
 save_dir: ${log_dir}/predictions
-
+  
 datamodule:
   dataset:
+    gdf_path: ${data_dir}/sentinel/timeseries/height_map_test_2019/gdf_height_map_timeseries_test_2019.geojson
     predict_dataset: 
       get_inputs: 
+        inputs_path: ${data_dir}/sentinel/timeseries/height_map_test_2019/
         open_even_oob: True
       stage: predict_test_subdivide
   instance:
     batch_size: 8
-
+    
 module:
   instance:
     train_metrics: null

@@ -2,8 +2,8 @@ defaults :
   - get_inputs : s1_s2_timeseries
   - get_targets : lidar
 
-gdf_path: ${data_dir}/sentinel/timeseries/lidarhd/gdf_height_map_timeseries.geojson
-save_dir: ${data_dir}/saved_tensors/timeseries/lidarhd/${run_name}/${run_version}/
+gdf_path: ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
+save_dir: ${data_dir}/saved_tensors/timeseries/height_map/${run_name}/${run_version}/
 batch_size_save: 8 # Taille des chunks safetensors
 resolution_input: 10
 resolution_target: 2.5
@@ -66,8 +66,9 @@ predict_dataset:
   get_inputs :  ${datamodule.dataset.get_inputs}
   get_targets : 
     _target_: src.datamodule.dataset.get_targets.nan.getNan
+    date_column: null
   batch_size_save: ${datamodule.dataset.batch_size_save}
   mode: ${datamodule.instance.mode}
-  save_dir: ${datamodule.dataset.save_dir}/${datamodule.dataset.predict_dataset.stage}
   stage: predict_test_subdivide
+  save_dir: ${datamodule.dataset.save_dir}/${datamodule.dataset.predict_dataset.stage}
   

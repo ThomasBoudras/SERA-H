@@ -1,5 +1,5 @@
 _target_: src.module.regression_model.utae.UTAE
-input_dim: 14
+inputs_dim: 14
 encoder_widths : [64, 64, 64, 128]
 decoder_widths: [32, 32, 64, 128]
 out_conv: [32,1]

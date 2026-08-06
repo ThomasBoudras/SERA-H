@@ -7,21 +7,21 @@ resolution : 2.5
 real_patch_size_plot : 500
 nb_jobs : 10
 seed : 12345
+date_column : lidar_acquisition_date
 print_config : True
 nb_plots : 50
 max_points_per_bin : 100000
-n_samples: 1000
+nb_samples: 1000
 
 resampling_method_liu: bilinear
 
 data_dir : data/
 save_dir : ${data_dir}/logs/metrics/height_map/${model}
-output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
 grouping_dates : lidar_acquisition_date
-version_prediction : test_lidarhd
-version_metrics : test_lidarhd
+version_prediction : test_height_map
+version_metrics : test_height_map
 
-geometries_path : ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
+geometries_path : ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
 hydra:
   run:
     dir: ${save_dir}
@@ -123,8 +123,8 @@ get_images :
 
     vegetation_mask :
       _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
-      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
-      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      lidarhd_classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      ign_forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
       resolution: ${resolution}
       classes_to_keep: [5]
       grouping_dates: ${grouping_dates}
@@ -200,7 +200,7 @@ get_metrics_local :
 
 get_metrics_global : 
   _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
-  metrics_to_print : []
+  metrics_to_save : null
   metrics_set :
     flatten_tuples_target_pred_pauls :
       _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer

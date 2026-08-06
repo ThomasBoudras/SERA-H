@@ -1,5 +1,5 @@
 _target_: src.datamodule.dataset.get_inputs.s1_s2_timeseries.getS1S2Timeseries
-inputs_path: ${data_dir}/sentinel/timeseries/lidarhd/
+inputs_path: ${data_dir}/sentinel/timeseries/height_map/
 resolution_input: ${datamodule.dataset.resolution_input}
 nb_timeseries_image: 16
 nb_timeseries_image_min: 4

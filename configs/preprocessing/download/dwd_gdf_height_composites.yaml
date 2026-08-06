@@ -1,13 +1,11 @@
 root_dir: data/
-data_dir: ${root_dir}/sentinel/composites/lidarhd
+data_dir: ${root_dir}/sentinel/composites/height_map
 gdf_path : ${root_dir}/utils/gdf_height_map_initial.geojson
 gee_project: 
   - "project_gee_1"
   - "project_gee_2"
 
 grouping_dates: lidar_acquisition_date
-
-n_jobs_parrallelized : 1
 
 resolution : 10
 tile_shape : 5000

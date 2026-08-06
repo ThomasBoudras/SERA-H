@@ -49,31 +49,30 @@ def train(config: DictConfig) :
         config.trainer, callbacks=callbacks, logger=logger)
         
     # Train the model
-    if config.get("ckpt_path") is not None or config.get("ckpt_path") != "last":
-        ckpt_path = config.get("ckpt_path")
-        if config.load_just_weights :
+    ckpt_path = config.get("ckpt_path", None)
+    if ckpt_path is not None and ckpt_path != "last":
+        if config.get("load_just_weights", False) :
             log.info(f"Start of training from checkpoint {ckpt_path} using only the weights !")
-            checkpoint = torch.load(ckpt_path)
+            checkpoint = torch.load(ckpt_path, map_location="cpu")
 
             if "state_dict" in checkpoint:
                 missing_keys, unexpected_keys = module.load_state_dict(checkpoint['state_dict'], strict=False)
             else:
                 missing_keys, unexpected_keys = module.load_state_dict(checkpoint, strict=False)
-            
+
             log.info(f"Missing keys in checkpoint: {missing_keys}")
             log.info(f"Unexpected keys in checkpoint: {unexpected_keys}")
 
             ckpt_path = None
-        
+
         else :
             log.info(f"Start of training from checkpoint {ckpt_path} !")
-    
+
     elif ckpt_path == "last" :
         log.info(f"Starting training from last checkpoint {ckpt_path} !")
-    
+
     else :
         log.info("Starting training from scratch!")
-        ckpt_path = None
     
     trainer.fit(model=module, datamodule=datamodule, ckpt_path=ckpt_path)
    

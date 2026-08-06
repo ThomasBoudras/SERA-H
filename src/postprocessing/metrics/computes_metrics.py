@@ -10,6 +10,7 @@ from lightning import seed_everything
 from src import global_utils as utils
 from joblib import Parallel, delayed
 import shutil
+import logging
 
 @hydra.main(version_base="1.3", config_path="../../../configs/postprocessing/metrics", config_name="height_predictions.yaml")
 def compute_metrics(config: DictConfig) -> None:
@@ -28,8 +29,8 @@ def compute_metrics(config: DictConfig) -> None:
         aoi_gdf = aoi_gdf[aoi_gdf["split"] == "test"].reset_index(drop=True)
         
     aoi_gdf_path = Path(config.save_dir) / "gdf_metrics.geojson"
-    if config.get("n_samples", None) is not None:
-        aoi_gdf = aoi_gdf.sample(config.n_samples).reset_index(drop=True)
+    if config.get("nb_samples", None) is not None:
+        aoi_gdf = aoi_gdf.sample(config.nb_samples).reset_index(drop=True)
     aoi_gdf.to_file(aoi_gdf_path, driver="GeoJSON")
 
     # Split the GeoDataFrame into chunks for parallel processing.
@@ -45,7 +46,6 @@ def compute_metrics(config: DictConfig) -> None:
     if config.get("get_plots_local", None) is not None :
         nb_plots = int(min(len(aoi_gdf), config.get_plots_local.nb_plots))
         indice_plot_local = np.random.choice(len(aoi_gdf), nb_plots, replace=False)
-        
         save_dir_local = config.get_plots_local.save_dir 
         if Path(save_dir_local).exists() :
             shutil.rmtree(save_dir_local)
@@ -71,21 +71,24 @@ def compute_metrics(config: DictConfig) -> None:
         
         metrics_list = []
         for idx_row, row in gdf_chunk.iterrows():
-            bounds = row["geometry"].bounds
-            # Load images only when needed for metrics computation or plotting
-            if get_metrics_local is not None or ((get_plots_local is not None) and (idx_row in indice_plot_local)):
-                images = get_images(row=row)
-            # Compute metrics for this row if needed
-            if get_metrics_local is not None:
-                metrics_local = get_metrics_local(images=images, row=row)
-                metrics_list.append(metrics_local)
-            else :
-                metrics_local = {}
-            # Plot for this row if needed
-            if (get_plots_local is not None) and (idx_row in indice_plot):
-                plot_name_sample = f"{int(bounds[0])}_{int(bounds[1])}"
-                get_plots_local(images, metrics_local, plot_name_sample=plot_name_sample, row=row)
-            
+            try:
+                bounds = row["geometry"].bounds
+                # Load images only when needed for metrics computation or plotting
+                if get_metrics_local is not None or ((get_plots_local is not None) and (idx_row in indice_plot_local)):
+                    images = get_images(row=row)
+                # Compute metrics for this row if needed
+                if get_metrics_local is not None:
+                    metrics_local = get_metrics_local(images=images, row=row)
+                    metrics_list.append(metrics_local)
+                else :
+                    metrics_local = {}
+                # Plot for this row if needed
+                if (get_plots_local is not None) and (idx_row in indice_plot):
+                    plot_name_sample = f"{int(bounds[0])}_{int(bounds[1])}"
+                    get_plots_local(images, metrics_local, plot_name_sample=plot_name_sample, row=row)
+            except Exception as e:
+                logging.error(f"Error processing row {idx_row}: {e}")
+                continue
         return metrics_list
 
     # Process chunks in parallel
@@ -116,19 +119,18 @@ def compute_metrics(config: DictConfig) -> None:
         
         metrics_global = get_metrics_global(metrics_local_aggregated)
 
-        if get_metrics_global.metrics_to_print == "all":
-            metrics_to_print = metrics_global
-        elif get_metrics_global.metrics_to_print is not None:
-            metrics_to_print = {}
-            for metric in get_metrics_global.metrics_to_print:
-                metrics_to_print[metric] = metrics_global[metric]
+        if get_metrics_global.metrics_to_save == "all":
+            metrics_to_save = metrics_global
+        elif get_metrics_global.metrics_to_save is not None:
+            metrics_to_save = {}
+            for metric in get_metrics_global.metrics_to_save:
+                metrics_to_save[metric] = metrics_global[metric]
         else :
-            metrics_to_print = {}
+            metrics_to_save = {}
 
-        if metrics_to_print :
-            df = pd.DataFrame(list(metrics_to_print.items()), columns=['Metrics', 'Value'])
-            print(df)
-            output_path_xlsx = Path(config.output_path_xlsx).resolve()
+        if metrics_to_save :
+            df = pd.DataFrame(list(metrics_to_save.items()), columns=['Metrics', 'Value'])
+            output_path_xlsx = Path(get_metrics_global.output_path_xlsx).resolve()
             if output_path_xlsx.exists() :
                 with pd.ExcelWriter(output_path_xlsx, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
                     df.to_excel(writer, index=False, sheet_name=config.version_metrics)
@@ -140,8 +142,26 @@ def compute_metrics(config: DictConfig) -> None:
     # Plot global metrics if needed
     get_plots_global = hydra.utils.instantiate(config.get_plots_global) 
     if get_plots_global is not None:
-        get_plots_global(metrics_global)
+        metrics_global_plots = get_plots_global(metrics_global)
         
+        if get_plots_global.metrics_to_save == "all":
+            global_plots_metrics_to_save = metrics_global_plots
+        elif get_plots_global.metrics_to_save is not None:
+            global_plots_metrics_to_save = {}
+            for metric in get_plots_global.metrics_to_save:
+                global_plots_metrics_to_save[metric] = metrics_global_plots[metric]
+        else :
+            global_plots_metrics_to_save = {}
+
+        if global_plots_metrics_to_save :
+            df = pd.DataFrame(list(global_plots_metrics_to_save.items()), columns=['Metrics', 'Value'])
+            output_path_xlsx = Path(get_plots_global.output_path_xlsx).resolve()
+            if output_path_xlsx.exists() :
+                with pd.ExcelWriter(output_path_xlsx, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+                    df.to_excel(writer, index=False, sheet_name=config.version_metrics)
+            else :
+                df.to_excel(output_path_xlsx, index=False, sheet_name=config.version_metrics)
+
 
 if __name__ == "__main__":
     compute_metrics()

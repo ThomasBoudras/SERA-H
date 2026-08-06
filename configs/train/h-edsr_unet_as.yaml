@@ -14,9 +14,6 @@ ckpt_path: last
 module:
     super_resolution_model: 
         input_type: COMPOSITES
-    metrics:
-        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
-        classification_path: ${data_dir}/open_canopy/
 
 datamodule:
     instance:
@@ -24,7 +21,7 @@ datamodule:
     dataset:
         patch_size_input: 32
         patch_size_target: 128
-        gdf_path: ${data_dir}/sentinel/composites/lidarhd/gdf_height_map_composites.geojson
+        gdf_path: ${data_dir}/sentinel/composites/height_map/gdf_height_map_composites.geojson
         get_targets:
             targets_path: ${data_dir}/open_canopy/
 

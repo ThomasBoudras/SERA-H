@@ -18,12 +18,8 @@ module:
         d_model: 1024
         n_head: 64
         d_k: 16
-        
     instance:
         super_resolution_model: null
-    metrics:
-        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
-        classification_path: ${data_dir}/open_canopy/
 
 datamodule:
     instance:

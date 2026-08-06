@@ -5,7 +5,7 @@ defaults:
   - _self_
 
 project : "pred_sera"
-run_version: test_lidarhd
+run_version: test_height_map
 
 ckpt_path : ${data_dir}/logs/train_sera/${run_name}/vx_${run_name}/best_checkpoints/epoch_xxx.ckpt
 load_just_weights: True
@@ -18,7 +18,8 @@ datamodule:
       get_inputs: 
         open_even_oob: True
       stage: predict_test_subdivide
-
+  instance:
+    batch_size: 8
 
 module:
   instance:

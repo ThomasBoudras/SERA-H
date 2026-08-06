@@ -139,9 +139,10 @@ def _verify_window(path: Path, bounds) -> bool:
     return img is not None and bool(img.size) and np.isfinite(img).any() # type: ignore
 
 def get_valid_vrts_timeseries(data_dir, geometry, date, half_window_size):
-        bounds = geometry.bounds 
+    try:
+        bounds = geometry.bounds
         valid_vrts = []
-        
+
         limit_date = datetime.strptime("20170328", "%Y%m%d") + timedelta(days=half_window_size)
         limit_date_str = limit_date.strftime("%Y%m%d")
         if date < limit_date_str:
@@ -154,15 +155,15 @@ def get_valid_vrts_timeseries(data_dir, geometry, date, half_window_size):
 
         s1_asc_vrts = [file for file in s1_asc_vrts_path.iterdir() if file.suffix == '.vrt']
         s1_asc_vrts = filter_files_by_date_gap(date, s1_asc_vrts, half_window_size)
-        
+
         s1_dsc_vrts = [file for file in s1_dsc_vrts_path.iterdir() if file.suffix == '.vrt']
         s1_dsc_vrts = filter_files_by_date_gap(date, s1_dsc_vrts, half_window_size)
-        
+
         s2_vrts = [file for file in s2_vrts_path.iterdir() if file.suffix == '.vrt']
         s2_vrts = filter_files_by_date_gap(date, s2_vrts, half_window_size)
 
         for s2_vrt in s2_vrts:
-            if _verify_window(s2_vrt, bounds): 
+            if _verify_window(s2_vrt, bounds):
                 sorted_s1_asc_vrts = _sort_by_proximity(s2_vrt, s1_asc_vrts)  # We are looking for the nearest tensor s1 in terms of date
                 sorted_s1_dsc_vrts = _sort_by_proximity(s2_vrt, s1_dsc_vrts)
 
@@ -176,9 +177,12 @@ def get_valid_vrts_timeseries(data_dir, geometry, date, half_window_size):
                                 s1_dsc_vrts.remove(s1_dsc_vrt)
                                 break
                         break
-        
+
         if len(valid_vrts) > 0 :
             return valid_vrts
+        return None
+    except Exception as e:
+        logging.warning(f"Skipping geometry {geometry.bounds}: {e}")
         return None
     
 def get_valid_vrts_composites(data_dir, geometry, date, half_window_size):

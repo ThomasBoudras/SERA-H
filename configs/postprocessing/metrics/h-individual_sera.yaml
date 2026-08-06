@@ -2,7 +2,7 @@ defaults:
     - h-individual_metrics_defaults
 
 model : h-sera_h
-version_prediction : test_lidarhd
+version_prediction : test_height_map
 resampling_method_pred : max
 
 get_images : 

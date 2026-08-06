@@ -13,9 +13,6 @@ ckpt_path: last
 module:
     instance:
         super_resolution_model: null
-    metrics:
-        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
-        classification_path: ${data_dir}/open_canopy/
 
 datamodule:
     instance:

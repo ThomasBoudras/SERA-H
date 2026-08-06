@@ -1,0 +1,1179 @@
+# @package _global_
+
+model: h-figure_gaps_and_edges
+
+min_height: 0
+max_height: 50
+resolution: 2.5
+nb_jobs: 10
+seed: 12345
+date_column: lidar_acquisition_date
+print_config: True
+
+tree_threshold: 2
+edge_tolerance: 5.0  # in meters
+gap_iou_threshold: 0.25
+
+bins_area: [25, 50, 100, 500, 1000]
+bins_labels: ["25-49", "50-99", "100-499", "500-999"]
+
+data_dir: data
+save_dir: ${data_dir}/logs/metrics/height_map/${model}
+grouping_dates: lidar_acquisition_date
+version_prediction: test_height_map
+version_metrics: test_height_map
+
+geometries_path: ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
+
+hydra:
+  run:
+    dir: ${save_dir}
+  output_subdir: hydra_logs
+
+get_images:
+  _target_: src.postprocessing.metrics.get_images_utils.get_images
+  image_loaded_set:
+    height_ref:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/open_canopy/<year>/lidar.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 0.1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # sera-h-max
+    height_pred_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h_max/${version_prediction}/predictions/data/h-sera_h_max_full.vrt
+      resolution: ${resolution}
+      resampling_method: max
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # edsr-utae-scale-1
+    height_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-sera_h_scale_1/${version_prediction}/predictions/data/h-sera_h_scale_1_full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # utae-boosted
+    height_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-utae_boosted/${version_prediction}/predictions/data/h-utae_boosted_full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+    # edsr-unet
+    height_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
+      path: ${data_dir}/logs/pred_sera/h-edsr_unet/${version_prediction}/predictions/data/h-edsr_unet_full.vrt
+      resolution: ${resolution}
+      resampling_method: bilinear
+      scaling_factor: 1
+      min_image: ${min_height}
+      max_image: ${max_height}
+      open_even_oob: False
+      max_date: null
+      min_date: null
+      grouping_dates: ${grouping_dates}
+
+  image_computed_set:
+    canopy_gap_mask_ref:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_ref
+      min_height: null
+      max_height: ${tree_threshold}
+
+    forest_mask_ref:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_ref
+      min_height: ${tree_threshold}
+      max_height: null
+
+    # --- sera-h-max ---
+    canopy_gap_mask_pred_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_sera
+      min_height: null
+      max_height: ${tree_threshold}
+
+    forest_mask_pred_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_sera
+      min_height: ${tree_threshold}
+      max_height: null
+
+    edge_mask_pred_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: ${edge_tolerance}
+      resolution: ${resolution}
+
+    binned_canopy_gap_mask_pred_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_sera
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "pred"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    binned_canopy_gap_mask_ref_sera:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_sera
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "ref"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    # --- edsr-utae-scale-1 ---
+    canopy_gap_mask_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_sera_h_scale_1
+      min_height: null
+      max_height: ${tree_threshold}
+
+    forest_mask_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_sera_h_scale_1
+      min_height: ${tree_threshold}
+      max_height: null
+
+    binned_canopy_gap_mask_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_sera_h_scale_1
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "pred"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    binned_canopy_gap_mask_ref_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_sera_h_scale_1
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "ref"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    # --- utae-boosted ---
+    canopy_gap_mask_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_utae_boosted
+      min_height: null
+      max_height: ${tree_threshold}
+
+    forest_mask_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_utae_boosted
+      min_height: ${tree_threshold}
+      max_height: null
+
+
+    binned_canopy_gap_mask_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_utae_boosted
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "pred"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    binned_canopy_gap_mask_ref_utae_boosted:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_utae_boosted
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "ref"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    # --- edsr-unet ---
+    canopy_gap_mask_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_edsr_unet
+      min_height: null
+      max_height: ${tree_threshold}
+
+    forest_mask_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred_edsr_unet
+      min_height: ${tree_threshold}
+      max_height: null
+
+    binned_canopy_gap_mask_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_edsr_unet
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "pred"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    binned_canopy_gap_mask_ref_edsr_unet:
+      _target_: src.postprocessing.metrics.get_images_utils.binned_by_object_scale_mask_computer
+      name_pred: canopy_gap_mask_pred_edsr_unet
+      name_ref: canopy_gap_mask_ref
+      bins_range_area: ${bins_area}
+      resolution: ${resolution}
+      iou_threshold: ${gap_iou_threshold}
+      reduction_basis: "ref"
+      include_outer_bins: False
+      apply_erosion_dilation: False
+
+    # --- edges (5 tolerances × 4 models) ---
+    detection_edge_sera_tol_0:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: 0.0
+      resolution: ${resolution}
+
+    detection_edge_sera_tol_25:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: 2.5
+      resolution: ${resolution}
+
+    detection_edge_sera_tol_50:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: 5.0
+      resolution: ${resolution}
+
+    detection_edge_sera_tol_75:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: 7.5
+      resolution: ${resolution}
+
+    detection_edge_sera_tol_100:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera
+      name_ref: forest_mask_ref
+      tolerance: 10.0
+      resolution: ${resolution}
+
+    detection_edge_sera_h_scale_1_tol_0:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera_h_scale_1
+      name_ref: forest_mask_ref
+      tolerance: 0.0
+      resolution: ${resolution}
+
+    detection_edge_sera_h_scale_1_tol_25:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera_h_scale_1
+      name_ref: forest_mask_ref
+      tolerance: 2.5
+      resolution: ${resolution}
+
+    detection_edge_sera_h_scale_1_tol_50:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera_h_scale_1
+      name_ref: forest_mask_ref
+      tolerance: 5.0
+      resolution: ${resolution}
+
+    detection_edge_sera_h_scale_1_tol_75:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera_h_scale_1
+      name_ref: forest_mask_ref
+      tolerance: 7.5
+      resolution: ${resolution}
+
+    detection_edge_sera_h_scale_1_tol_100:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_sera_h_scale_1
+      name_ref: forest_mask_ref
+      tolerance: 10.0
+      resolution: ${resolution}
+
+    detection_edge_utae_boosted_tol_0:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_utae_boosted
+      name_ref: forest_mask_ref
+      tolerance: 0.0
+      resolution: ${resolution}
+
+    detection_edge_utae_boosted_tol_25:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_utae_boosted
+      name_ref: forest_mask_ref
+      tolerance: 2.5
+      resolution: ${resolution}
+
+    detection_edge_utae_boosted_tol_50:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_utae_boosted
+      name_ref: forest_mask_ref
+      tolerance: 5.0
+      resolution: ${resolution}
+
+    detection_edge_utae_boosted_tol_75:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_utae_boosted
+      name_ref: forest_mask_ref
+      tolerance: 7.5
+      resolution: ${resolution}
+
+    detection_edge_utae_boosted_tol_100:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_utae_boosted
+      name_ref: forest_mask_ref
+      tolerance: 10.0
+      resolution: ${resolution}
+
+    detection_edge_edsr_unet_tol_0:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_edsr_unet
+      name_ref: forest_mask_ref
+      tolerance: 0.0
+      resolution: ${resolution}
+
+    detection_edge_edsr_unet_tol_25:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_edsr_unet
+      name_ref: forest_mask_ref
+      tolerance: 2.5
+      resolution: ${resolution}
+
+    detection_edge_edsr_unet_tol_50:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_edsr_unet
+      name_ref: forest_mask_ref
+      tolerance: 5.0
+      resolution: ${resolution}
+
+    detection_edge_edsr_unet_tol_75:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_edsr_unet
+      name_ref: forest_mask_ref
+      tolerance: 7.5
+      resolution: ${resolution}
+
+    detection_edge_edsr_unet_tol_100:
+      _target_: src.postprocessing.metrics.get_images_utils.detection_edge_mask_computer
+      name_pred: forest_mask_pred_edsr_unet
+      name_ref: forest_mask_ref
+      tolerance: 10.0
+      resolution: ${resolution}
+
+get_metrics_local:
+  _target_: src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
+  metrics_set:
+
+    # --- sera-h-max ---
+    binned_gap_tp_pred_sera:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_sera
+      bins_range_area: ${bins_area}
+      reduction_basis: "pred"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fp_pred_sera:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_sera
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_tp_ref_sera:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_sera
+      bins_range_area: ${bins_area}
+      reduction_basis: "ref"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fn_ref_sera:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_sera
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_negative_object_scale_local_computer
+      include_outer_bins: False
+
+    # --- edsr-utae-scale-1 ---
+    binned_gap_tp_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      reduction_basis: "pred"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fp_pred_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_tp_ref_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      reduction_basis: "ref"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fn_ref_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_negative_object_scale_local_computer
+      include_outer_bins: False
+
+    # --- utae-boosted ---
+    binned_gap_tp_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_utae_boosted
+      bins_range_area: ${bins_area}
+      reduction_basis: "pred"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fp_pred_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_utae_boosted
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_tp_ref_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_utae_boosted
+      bins_range_area: ${bins_area}
+      reduction_basis: "ref"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fn_ref_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_utae_boosted
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_negative_object_scale_local_computer
+      include_outer_bins: False
+
+    # --- edsr-unet ---
+    binned_gap_tp_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_edsr_unet
+      bins_range_area: ${bins_area}
+      reduction_basis: "pred"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fp_pred_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_pred_edsr_unet
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_tp_ref_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_edsr_unet
+      bins_range_area: ${bins_area}
+      reduction_basis: "ref"
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.true_positive_object_scale_local_computer
+      include_outer_bins: False
+
+    binned_gap_fn_ref_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.binned_by_object_scale_local_computer
+      name_change: binned_canopy_gap_mask_ref_edsr_unet
+      bins_range_area: ${bins_area}
+      reduction_basis: null
+      method_computer:
+        _target_: hydra.utils.get_class
+        path: src.postprocessing.metrics.get_metrics_local_utils.false_negative_object_scale_local_computer
+      include_outer_bins: False
+
+    # --- edges ---
+    edge_sera_tol_0:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_tol_0
+
+    edge_sera_tol_25:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_tol_25
+
+    edge_sera_tol_50:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_tol_50
+
+    edge_sera_tol_75:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_tol_75
+
+    edge_sera_tol_100:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_tol_100
+
+    edge_sera_h_scale_1_tol_0:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_h_scale_1_tol_0
+
+    edge_sera_h_scale_1_tol_25:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_h_scale_1_tol_25
+
+    edge_sera_h_scale_1_tol_50:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_h_scale_1_tol_50
+
+    edge_sera_h_scale_1_tol_75:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_h_scale_1_tol_75
+
+    edge_sera_h_scale_1_tol_100:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_sera_h_scale_1_tol_100
+
+    edge_utae_boosted_tol_0:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_utae_boosted_tol_0
+
+    edge_utae_boosted_tol_25:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_utae_boosted_tol_25
+
+    edge_utae_boosted_tol_50:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_utae_boosted_tol_50
+
+    edge_utae_boosted_tol_75:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_utae_boosted_tol_75
+
+    edge_utae_boosted_tol_100:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_utae_boosted_tol_100
+
+    edge_edsr_unet_tol_0:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_edsr_unet_tol_0
+
+    edge_edsr_unet_tol_25:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_edsr_unet_tol_25
+
+    edge_edsr_unet_tol_50:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_edsr_unet_tol_50
+
+    edge_edsr_unet_tol_75:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_edsr_unet_tol_75
+
+    edge_edsr_unet_tol_100:
+      _target_: src.postprocessing.metrics.get_metrics_local_utils.precision_recall_component_object_scale_local_computer
+      name_mask: detection_edge_edsr_unet_tol_100
+
+get_metrics_global:
+  _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
+  metrics_to_save: all
+  output_path_xlsx: ${save_dir}/metrics_${model}.xlsx
+  metrics_set:
+
+    # --- sera-h-max ---
+    binned_gap_precision_sera:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_precision_global_computer
+      name_true_positive: binned_gap_tp_pred_sera
+      name_false_positive: binned_gap_fp_pred_sera
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    binned_gap_recall_sera:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_recall_global_computer
+      name_true_positive: binned_gap_tp_ref_sera
+      name_false_negative: binned_gap_fn_ref_sera
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    # --- edsr-utae-scale-1 ---
+    binned_gap_precision_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_precision_global_computer
+      name_true_positive: binned_gap_tp_pred_sera_h_scale_1
+      name_false_positive: binned_gap_fp_pred_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    binned_gap_recall_sera_h_scale_1:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_recall_global_computer
+      name_true_positive: binned_gap_tp_ref_sera_h_scale_1
+      name_false_negative: binned_gap_fn_ref_sera_h_scale_1
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    # --- utae-boosted ---
+    binned_gap_precision_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_precision_global_computer
+      name_true_positive: binned_gap_tp_pred_utae_boosted
+      name_false_positive: binned_gap_fp_pred_utae_boosted
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    binned_gap_recall_utae_boosted:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_recall_global_computer
+      name_true_positive: binned_gap_tp_ref_utae_boosted
+      name_false_negative: binned_gap_fn_ref_utae_boosted
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    # --- edsr-unet ---
+    binned_gap_precision_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_precision_global_computer
+      name_true_positive: binned_gap_tp_pred_edsr_unet
+      name_false_positive: binned_gap_fp_pred_edsr_unet
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    binned_gap_recall_edsr_unet:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.binned_by_area_recall_global_computer
+      name_true_positive: binned_gap_tp_ref_edsr_unet
+      name_false_negative: binned_gap_fn_ref_edsr_unet
+      bins_range_area: ${bins_area}
+      include_outer_bins: False
+
+    # --- edges (precision/recall × 5 tolerances × 4 models) ---
+    # suffix _0/25/50/75/100 = tolerance 0m/2.5m/5m/7.5m/10m (decimeters)
+    edge_precision_sera_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_tol_0_true_positive_pred
+      name_false_positive: edge_sera_tol_0_false_positive
+
+    edge_recall_sera_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_tol_0_true_positive_ref
+      name_false_negative: edge_sera_tol_0_false_negative
+
+    edge_precision_sera_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_tol_25_true_positive_pred
+      name_false_positive: edge_sera_tol_25_false_positive
+
+    edge_recall_sera_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_tol_25_true_positive_ref
+      name_false_negative: edge_sera_tol_25_false_negative
+
+    edge_precision_sera_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_tol_50_true_positive_pred
+      name_false_positive: edge_sera_tol_50_false_positive
+
+    edge_recall_sera_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_tol_50_true_positive_ref
+      name_false_negative: edge_sera_tol_50_false_negative
+
+    edge_precision_sera_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_tol_75_true_positive_pred
+      name_false_positive: edge_sera_tol_75_false_positive
+
+    edge_recall_sera_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_tol_75_true_positive_ref
+      name_false_negative: edge_sera_tol_75_false_negative
+
+    edge_precision_sera_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_tol_100_true_positive_pred
+      name_false_positive: edge_sera_tol_100_false_positive
+
+    edge_recall_sera_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_tol_100_true_positive_ref
+      name_false_negative: edge_sera_tol_100_false_negative
+
+    edge_precision_sera_h_scale_1_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_0_true_positive_pred
+      name_false_positive: edge_sera_h_scale_1_tol_0_false_positive
+
+    edge_recall_sera_h_scale_1_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_0_true_positive_ref
+      name_false_negative: edge_sera_h_scale_1_tol_0_false_negative
+
+    edge_precision_sera_h_scale_1_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_25_true_positive_pred
+      name_false_positive: edge_sera_h_scale_1_tol_25_false_positive
+
+    edge_recall_sera_h_scale_1_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_25_true_positive_ref
+      name_false_negative: edge_sera_h_scale_1_tol_25_false_negative
+
+    edge_precision_sera_h_scale_1_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_50_true_positive_pred
+      name_false_positive: edge_sera_h_scale_1_tol_50_false_positive
+
+    edge_recall_sera_h_scale_1_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_50_true_positive_ref
+      name_false_negative: edge_sera_h_scale_1_tol_50_false_negative
+
+    edge_precision_sera_h_scale_1_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_75_true_positive_pred
+      name_false_positive: edge_sera_h_scale_1_tol_75_false_positive
+
+    edge_recall_sera_h_scale_1_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_75_true_positive_ref
+      name_false_negative: edge_sera_h_scale_1_tol_75_false_negative
+
+    edge_precision_sera_h_scale_1_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_100_true_positive_pred
+      name_false_positive: edge_sera_h_scale_1_tol_100_false_positive
+
+    edge_recall_sera_h_scale_1_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_sera_h_scale_1_tol_100_true_positive_ref
+      name_false_negative: edge_sera_h_scale_1_tol_100_false_negative
+
+    edge_precision_utae_boosted_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_utae_boosted_tol_0_true_positive_pred
+      name_false_positive: edge_utae_boosted_tol_0_false_positive
+
+    edge_recall_utae_boosted_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_utae_boosted_tol_0_true_positive_ref
+      name_false_negative: edge_utae_boosted_tol_0_false_negative
+
+    edge_precision_utae_boosted_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_utae_boosted_tol_25_true_positive_pred
+      name_false_positive: edge_utae_boosted_tol_25_false_positive
+
+    edge_recall_utae_boosted_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_utae_boosted_tol_25_true_positive_ref
+      name_false_negative: edge_utae_boosted_tol_25_false_negative
+
+    edge_precision_utae_boosted_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_utae_boosted_tol_50_true_positive_pred
+      name_false_positive: edge_utae_boosted_tol_50_false_positive
+
+    edge_recall_utae_boosted_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_utae_boosted_tol_50_true_positive_ref
+      name_false_negative: edge_utae_boosted_tol_50_false_negative
+
+    edge_precision_utae_boosted_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_utae_boosted_tol_75_true_positive_pred
+      name_false_positive: edge_utae_boosted_tol_75_false_positive
+
+    edge_recall_utae_boosted_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_utae_boosted_tol_75_true_positive_ref
+      name_false_negative: edge_utae_boosted_tol_75_false_negative
+
+    edge_precision_utae_boosted_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_utae_boosted_tol_100_true_positive_pred
+      name_false_positive: edge_utae_boosted_tol_100_false_positive
+
+    edge_recall_utae_boosted_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_utae_boosted_tol_100_true_positive_ref
+      name_false_negative: edge_utae_boosted_tol_100_false_negative
+
+    edge_precision_edsr_unet_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_edsr_unet_tol_0_true_positive_pred
+      name_false_positive: edge_edsr_unet_tol_0_false_positive
+
+    edge_recall_edsr_unet_0:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_edsr_unet_tol_0_true_positive_ref
+      name_false_negative: edge_edsr_unet_tol_0_false_negative
+
+    edge_precision_edsr_unet_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_edsr_unet_tol_25_true_positive_pred
+      name_false_positive: edge_edsr_unet_tol_25_false_positive
+
+    edge_recall_edsr_unet_25:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_edsr_unet_tol_25_true_positive_ref
+      name_false_negative: edge_edsr_unet_tol_25_false_negative
+
+    edge_precision_edsr_unet_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_edsr_unet_tol_50_true_positive_pred
+      name_false_positive: edge_edsr_unet_tol_50_false_positive
+
+    edge_recall_edsr_unet_50:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_edsr_unet_tol_50_true_positive_ref
+      name_false_negative: edge_edsr_unet_tol_50_false_negative
+
+    edge_precision_edsr_unet_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_edsr_unet_tol_75_true_positive_pred
+      name_false_positive: edge_edsr_unet_tol_75_false_positive
+
+    edge_recall_edsr_unet_75:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_edsr_unet_tol_75_true_positive_ref
+      name_false_negative: edge_edsr_unet_tol_75_false_negative
+
+    edge_precision_edsr_unet_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.precision_global_computer
+      name_true_positive: edge_edsr_unet_tol_100_true_positive_pred
+      name_false_positive: edge_edsr_unet_tol_100_false_positive
+
+    edge_recall_edsr_unet_100:
+      _target_: src.postprocessing.metrics.get_metrics_global_utils.recall_global_computer
+      name_true_positive: edge_edsr_unet_tol_100_true_positive_ref
+      name_false_negative: edge_edsr_unet_tol_100_false_negative
+
+get_plots_local:
+  _target_: src.postprocessing.metrics.get_plots_local_utils.get_plots_local
+  save_dir: ${save_dir}/${version_metrics}_figures
+  nb_plots: 10
+  model_name: ${model}
+  plot_set:
+    height_comparisons:
+      _target_: src.postprocessing.metrics.get_plots_local_utils.plot_model
+      nb_row: 2
+      nb_col: 5
+      size_plot_width: 25
+      size_plot_height: 15
+      wspace: 0.03
+      hspace: 0.03
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: "Height Ref"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_ref
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: "Height SERA"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 2
+          graph_title: "Height EDSR-UTAE-10m"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_sera_h_scale_1
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 3
+          graph_title: "Height BI-UTAE*"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_utae_boosted
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 0
+          idx_col: 4
+          graph_title: "Height EDSR-UNet"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: height_pred_edsr_unet
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: magma
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: ${min_height}
+              vmax: ${max_height}
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 0
+          graph_title: "Gap Mask Ref"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: canopy_gap_mask_ref
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: gray
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: 0
+              vmax: 1
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 1
+          graph_title: "Gap Mask SERA"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: canopy_gap_mask_pred_sera
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: gray
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: 0
+              vmax: 1
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 2
+          graph_title: "Gap Mask EDSR-UTAE-10m"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: canopy_gap_mask_pred_sera_h_scale_1
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: gray
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: 0
+              vmax: 1
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 3
+          graph_title: "Gap Mask BI-UTAE*"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: canopy_gap_mask_pred_utae_boosted
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: gray
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: 0
+              vmax: 1
+        - _target_: src.postprocessing.metrics.get_plots_local_utils.graph_model
+          idx_row: 1
+          idx_col: 4
+          graph_title: "Gap Mask EDSR-UNet"
+          grouping_dates: ${grouping_dates}
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_local_utils.method_imshow
+            image_name: canopy_gap_mask_pred_edsr_unet
+            real_patch_size: null
+            resolution: ${resolution}
+            cmap: gray
+            norm:
+              _target_: matplotlib.colors.Normalize
+              vmin: 0
+              vmax: 1
+
+get_plots_global:
+  _target_: src.postprocessing.metrics.get_plots_global_utils.get_plots_global
+  save_dir: ${save_dir}/${version_metrics}_figures
+  model_name: "gaps_binned"
+  metrics_to_save: all
+  output_path_xlsx: ${save_dir}/plots_metrics_${model}.xlsx
+  plot_set:
+    gap_performance_by_area:
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 1
+      nb_col: 2
+      size_plot_width: 14
+      size_plot_height: 5
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_curve_by_bins_intervals
+            metric_names: [binned_gap_recall_sera, binned_gap_recall_sera_h_scale_1, binned_gap_recall_utae_boosted, binned_gap_recall_edsr_unet]
+            bins: ${bins_area}
+            legend_bins: ${bins_labels}
+            labels: ["SERA-H", "EDSR-UTAE-10m", "BI-UTAE$^*$", "EDSR-UNet"]
+            x_label: "Reference gap area (m²)"
+            y_label: "Recall"
+            colors: ["#FF5733", "#17BEBB", "#2E86C1", "#8E44AD"]
+            y_min: 0
+            y_max: 1.05
+            legend_loc: "lower right"
+            include_outer_bins: False
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_curve_by_bins_intervals
+            metric_names: [binned_gap_precision_sera, binned_gap_precision_sera_h_scale_1, binned_gap_precision_utae_boosted, binned_gap_precision_edsr_unet]
+            bins: ${bins_area}
+            legend_bins: ${bins_labels}
+            labels: ["SERA-H", "EDSR-UTAE-10m", "BI-UTAE$^*$", "EDSR-UNet"]
+            x_label: "Predicted gap area (m²)"
+            y_label: "Precision"
+            colors: ["#FF5733", "#17BEBB", "#2E86C1", "#8E44AD"]
+            y_min: 0
+            y_max: 1.05
+            legend_loc: "lower right"
+            include_outer_bins: False
+
+    edge_performance_by_tolerance:
+      _target_: src.postprocessing.metrics.get_plots_global_utils.plot_model
+      nb_row: 1
+      nb_col: 2
+      size_plot_width: 14
+      size_plot_height: 5
+      graph_list:
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 0
+          graph_title: null
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_curve_by_values
+            metric_names: [edge_recall_sera, edge_recall_sera_h_scale_1, edge_recall_utae_boosted, edge_recall_edsr_unet]
+            values: [0, 25, 50, 75, 100]
+            legend_values: ["0m", "2.5m", "5m", "7.5m", "10m"]
+            labels: ["SERA-H", "EDSR-UTAE-10m", "BI-UTAE$^*$", "EDSR-UNet"]
+            x_label: "Tolerance (m)"
+            y_label: "Recall"
+            colors: ["#FF5733", "#17BEBB", "#2E86C1", "#8E44AD"]
+            y_min: 0
+            y_max: 1.05
+            legend_loc: "lower right"
+
+        - _target_: src.postprocessing.metrics.get_plots_global_utils.graph_model
+          idx_row: 0
+          idx_col: 1
+          graph_title: null
+          method_graph:
+            _target_: src.postprocessing.metrics.get_plots_global_utils.method_curve_by_values
+            metric_names: [edge_precision_sera, edge_precision_sera_h_scale_1, edge_precision_utae_boosted, edge_precision_edsr_unet]
+            values: [0, 25, 50, 75, 100]
+            legend_values: ["0m", "2.5m", "5m", "7.5m", "10m"]
+            labels: ["SERA-H", "EDSR-UTAE-10m", "BI-UTAE$^*$", "EDSR-UNet"]
+            x_label: "Tolerance (m)"
+            y_label: "Precision"
+            colors: ["#FF5733", "#17BEBB", "#2E86C1", "#8E44AD"]
+            y_min: 0
+            y_max: 1.05
+            legend_loc: "lower right"

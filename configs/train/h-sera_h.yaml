@@ -3,13 +3,8 @@
 project: "train_sera"
 run_name: h-sera_h
 run_version: vx_${run_name}
-data_dir: data/
+data_dir: data
 ckpt_path: last
-
-module:
-    metrics:
-        forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
-        classification_path: ${data_dir}/open_canopy/
 
 datamodule:
     dataset:

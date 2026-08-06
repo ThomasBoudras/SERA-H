@@ -31,8 +31,10 @@ class getLidarImages :
         area = row[self.area_column] if self.area_column is not None else None
         unit = row[self.unit_column] if self.unit_column is not None and self.unit_column in row else "m"
  
-        lidar_vrt  = self.targets_path.replace("<lidar_date>", lidar_date[:4])
-        lidar_vrt  = lidar_vrt.replace("<area>", area)
+        if lidar_date is not None:
+            lidar_vrt  = self.targets_path.replace("<lidar_date>", lidar_date[:4])
+        if area is not None:
+            lidar_vrt  = lidar_vrt.replace("<area>", area)
 
         targets, _ = get_window(
             image_path=lidar_vrt,

@@ -4,17 +4,16 @@ resolution : 2.5
 real_patch_size_plot : 500
 nb_jobs : 10
 seed : 12345
+date_column : lidar_acquisition_date
 print_config : True
 nb_plots : 50
 
-data_dir : data/
+data_dir : data
 save_dir : ${data_dir}/logs/metrics/height_map/${model}
-output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
 grouping_dates : lidar_acquisition_date
-version_metrics : test_lidarhd
+version_metrics : test_height_map
 
-geometries_path : ${data_dir}/sentinel/timeseries/diff_map/gdf_height_map_timeseries.geojson
-
+geometries_path : ${data_dir}/sentinel/timeseries/height_map/gdf_height_map_timeseries.geojson
 hydra:
   run:
     dir: ${save_dir}
@@ -25,8 +24,8 @@ get_images :
   image_loaded_set:
     sentinel_rgb :
       _target_: src.postprocessing.metrics.get_images_utils.input_image_loader
-      path: ${data_dir}/sentinel/composites/lidarhd/s2/s2.vrt
-      resolution: null  
+      path: ${data_dir}/sentinel/timeseries/height_map/s2/s2_vrts/
+      resolution: null
       resampling_method: bilinear
       open_even_oob: True
       channel_to_keep: [2,1,0]
@@ -58,8 +57,8 @@ get_images :
 
     vegetation_mask :
       _target_: src.postprocessing.metrics.get_images_utils.mask_image_loader
-      classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
-      forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
+      lidarhd_classification_mask_path: ${data_dir}/open_canopy/<year>/lidar_classification.vrt
+      ign_forest_mask_path: ${data_dir}/open_canopy/forest_mask.parquet
       resolution: ${resolution}
       classes_to_keep: [5]
       grouping_dates: ${grouping_dates}
@@ -75,12 +74,27 @@ get_images :
       input_name: height_target
       mask_name: vegetation_mask
 
+    forest_mask_pred :
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_pred
+      min_height: 2
+      max_height: null
+
+    forest_mask_ref :
+      _target_: src.postprocessing.metrics.get_images_utils.min_max_height_mask_computer
+      name_image: height_target
+      min_height: 2
+      max_height: null
+
     difference_pred_target :
       _target_: src.postprocessing.metrics.get_images_utils.difference_computer
       input_name_1: height_pred
       input_name_2: height_target
-      min_image: -${max_height}
-      max_image: ${max_height}
+      max_height: 0
+      min_height: ${max_height}
+      min_difference: -${max_height}
+      max_difference: ${max_height}
+      threshold_forest: null
     
 get_metrics_local : 
   _target_ : src.postprocessing.metrics.get_metrics_local_utils.get_metrics_local
@@ -103,10 +117,9 @@ get_metrics_local :
       name_target: masked_height_target
       min_target: 2
     component_treecover :
-      _target_ : src.postprocessing.metrics.get_metrics_local_utils.treecover_local_computer
-      name_pred: height_pred
-      name_target: height_target
-      threshold: 2
+      _target_ : src.postprocessing.metrics.get_metrics_local_utils.iou_local_computer
+      name_pred: forest_mask_pred
+      name_target: forest_mask_ref
 
     mae_local :
       _target_ : src.postprocessing.metrics.get_metrics_local_utils.mean_local_computer
@@ -128,7 +141,8 @@ get_metrics_local :
 
 get_metrics_global :
   _target_ : src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
-  metrics_to_print : all
+  metrics_to_save: all
+  output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
   metrics_set :
     mae_global :
       _target_ : src.postprocessing.metrics.get_metrics_global_utils.mean_global_computeur

@@ -4,7 +4,7 @@ model_checkpoint_best: # Save the best checkpoint of the training
     filename: "epoch_{epoch:03d}"
     monitor: "val/loss" 
     mode: "min" 
-    save_top_k: 5 
+    save_top_k: 10 
     save_last: False 
     auto_insert_metric_name: False
     save_on_train_epoch_end: False

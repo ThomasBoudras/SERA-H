@@ -18,6 +18,91 @@ class get_metrics_local:
         return metrics
 
 
+class true_positive_object_scale_local_computer:
+    def __init__(self, name_change, reduction_basis):
+        self.name_change = name_change
+        self.reduction_basis = reduction_basis
+        assert self.reduction_basis in ["pred", "ref"], "reduction_basis must be 'pred' or 'ref'"
+        
+    def compute_metrics(self, images, metrics_previous, row):
+        name_metrics = f"{self.name_change}_{self.reduction_basis}"
+        if name_metrics not in images:
+            raise Exception(f"You must first load {name_metrics}")
+
+        image_change = images[name_metrics]
+
+        # In the evaluation mask, 1 represents a True Positive (in the ref channel)
+        tp_mask = (image_change == 1).astype(np.uint8)
+        _, num_tp = label(tp_mask, return_num=True)
+        
+        return num_tp
+
+
+class false_positive_object_scale_local_computer:
+    def __init__(self, name_change):
+        self.name_change = name_change
+        
+    def compute_metrics(self, images, metrics_previous, row):
+        name_metrics = f"{self.name_change}_pred"
+        if name_metrics not in images:
+            raise Exception(f"You must first load {name_metrics}")
+
+        image_change_pred = images[name_metrics]
+        
+        # In the evaluation mask, -1 represents a False Positive (in the pred channel)
+        fp_mask = (image_change_pred == -1).astype(np.uint8)
+        _, num_fp = label(fp_mask, return_num=True)
+        
+        return num_fp
+        
+
+class false_negative_object_scale_local_computer:
+    def __init__(self, name_change):
+        self.name_change = name_change
+        
+    def compute_metrics(self, images, metrics_previous, row):
+        name_metrics = f"{self.name_change}_ref"
+        if name_metrics not in images:
+            raise Exception(f"You must first load {name_metrics}")
+
+        image_change_ref = images[name_metrics]
+
+        # In the evaluation mask, -1 represents a False Negative (in the ref channel)
+        fn_mask = (image_change_ref == -1).astype(np.uint8)
+        _, num_fn = label(fn_mask, return_num=True)
+        
+        return num_fn
+
+
+class binned_by_object_scale_local_computer:
+    def __init__(self, name_change, bins_range_area, method_computer, reduction_basis, include_outer_bins=True):
+        self.name_change = name_change
+        self.bins_range_area = [None] + bins_range_area + [None] if include_outer_bins else bins_range_area
+        self.method_computer = method_computer
+        self.reduction_basis = reduction_basis
+        assert self.reduction_basis in ["pred", "ref", None], "reduction_basis must be 'pred' or 'ref' or None"
+        
+    def compute_metrics(self, images, metrics_previous, row):
+        dict_metrics = {}
+        for bin_idx in range(len(self.bins_range_area) - 1):
+            min_area_current = self.bins_range_area[bin_idx]
+            max_area_current = self.bins_range_area[bin_idx + 1]
+            max_area_current_str = "" if max_area_current is None else str(int(max_area_current))
+            min_area_current_str = "" if min_area_current is None else str(int(min_area_current))
+            name_bin = f"{min_area_current_str}-{max_area_current_str}"
+            name_change_bin = f"{self.name_change}_{name_bin}"
+            
+            if self.reduction_basis is None:
+                method_computer = self.method_computer(name_change_bin)
+            else:
+                method_computer = self.method_computer(name_change_bin, self.reduction_basis)
+            metric_value = method_computer.compute_metrics(images, metrics_previous, row)
+                        
+            dict_metrics[name_bin] = metric_value
+        
+        return dict_metrics      
+
+
 class mean_local_computer:
     def __init__(self, metric_component_name, root=False):
         self.metric_component_name = metric_component_name
@@ -25,7 +110,7 @@ class mean_local_computer:
         
     def compute_metrics(self, images, metrics_previous, row) :
         if self.metric_component_name not in metrics_previous :
-            Exception(f"You must first load {self.metric_component_name}")
+            raise Exception(f"You must first load {self.metric_component_name}")
         
         metric_component = metrics_previous[self.metric_component_name]
 
@@ -61,7 +146,7 @@ class mae_component_computer:
 
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
         
         image_pred = images[self.name_pred]
         image_target = images[self.name_target]
@@ -92,7 +177,7 @@ class rmse_component_computer:
         
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
 
         image_pred = images[self.name_pred]
         image_target = images[self.name_target]
@@ -114,7 +199,7 @@ class me_component_computer:
            
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
 
         image_pred = images[self.name_pred]
         image_target = images[self.name_target]
@@ -137,7 +222,7 @@ class nmae_component_computer:
 
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
             
         image_pred = images[self.name_pred]
         image_target = images[self.name_target]
@@ -152,31 +237,53 @@ class nmae_component_computer:
         return sum, nb_value
 
 
-class treecover_local_computer:
-    def __init__(self, name_pred, name_target, threshold):
+class iou_local_computer:
+    def __init__(self, name_pred, name_target):
         self.name_pred = name_pred
         self.name_target = name_target
-        self.threshold = threshold
 
     def compute_metrics(self, images, metrics_previous, row) :
-        if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+        if (self.name_pred not in images) or (self.name_target not in images) :
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
         
-        image_pred = images[self.name_pred]
-        image_target = images[self.name_target]
+        mask_pred = images[self.name_pred]
+        mask_target = images[self.name_target]
         
-        nan_mask = np.isnan(image_pred) | np.isnan(image_target)
-        image_pred = image_pred[~nan_mask]
-        image_target = image_target[~nan_mask]
+        nan_mask = np.isnan(mask_pred) | np.isnan(mask_target)
+        mask_pred = mask_pred[~nan_mask].astype(bool)
+        mask_target = mask_target[~nan_mask].astype(bool)
 
-        mask_pred = image_pred > self.threshold
-        mask_target = image_target > self.threshold
-        
         intersection = np.sum(mask_pred & mask_target)
         union = np.sum(mask_pred | mask_target)
         
         return intersection, union
 
+
+class precision_recall_component_object_scale_local_computer:
+    def __init__(self, name_mask):
+        self.name_mask = name_mask
+        
+    def compute_metrics(self, images, metrics_previous, row):
+        name_pred = f"{self.name_mask}_pred"
+        name_ref = f"{self.name_mask}_ref"
+        if (name_pred not in images) or (name_ref not in images):
+            raise Exception(f"You must first load {name_pred} and {name_ref}")
+
+        mask_pred = images[name_pred]
+        mask_ref = images[name_ref]
+
+        # In the evaluation masks, 1 is a true positive and -1 is a false positive (pred side) / false negative (ref side)
+        true_positive_pred = np.sum(mask_pred == 1)
+        false_positive = np.sum(mask_pred == -1)
+        true_positive_ref = np.sum(mask_ref == 1)
+        false_negative = np.sum(mask_ref == -1)
+
+        return {
+            "true_positive_pred": true_positive_pred,
+            "false_positive": false_positive,
+            "true_positive_ref": true_positive_ref,
+            "false_negative": false_negative,
+        }
 
 class flatten_local_computer:
     def __init__(self, name_pred, name_target, min_value_threshold_or=None, max_value_threshold_or=None, min_value_threshold_and=None, max_value_threshold_and=None):
@@ -199,7 +306,7 @@ class flatten_local_computer:
 
     def compute_metrics(self, images, metrics_previous, row) :
         if self.name_pred not in images or self.name_target not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
         
         image_pred = images[self.name_pred]
         image_target = images[self.name_target]
@@ -221,10 +328,35 @@ class flatten_local_computer:
         
         return image_target.flatten(), image_pred.flatten()
 
+
+class group_by_bins_local_computer:
+    def __init__(self, name_pred, name_target, bins, method_metrics):
+        self.name_pred = name_pred
+        self.name_target = name_target
+        self.bins = bins
+        self.method_metrics = getattr(self, method_metrics)
+
+    def absolute_error(self, pred, target):
+        return np.abs(pred - target)
+    
+    def squared_error(self, pred, target):
+        return np.square(pred - target)
+    
+    def error(self, pred, target):
+        return pred - target
+    
+    def keep_pred_positive(self, pred, target):
+        mask = pred > -5
+        return pred[mask]
+    
+    def return_pred(self, pred, target):
+        return pred
+
+
     
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
         
         target = images[self.name_target]
         pred = images[self.name_pred]
@@ -280,7 +412,7 @@ class group_by_nb_image_local_computer:
         
     def compute_metrics(self, images, metrics_previous, row) :
         if (self.name_pred not in images) or (self.name_target) not in images :
-            Exception(f"You must first load {self.name_pred} and {self.name_target}")
+            raise Exception(f"You must first load {self.name_pred} and {self.name_target}")
         
         target = images[self.name_target]
         pred = images[self.name_pred]

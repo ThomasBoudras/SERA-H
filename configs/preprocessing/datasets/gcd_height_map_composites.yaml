@@ -1,5 +1,5 @@
 root_dir: data/
-data_dir: ${root_dir}/sentinel/composites/lidarhd
+data_dir: ${root_dir}/sentinel/composites/height_map
 
 create_vrts: src.preprocessing.datasets.get_clean_dataset_utils.create_vrts_composites
 get_valid_vrts: src.preprocessing.datasets.get_clean_dataset_utils.get_valid_vrts_composites

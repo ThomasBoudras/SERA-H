@@ -1,17 +1,17 @@
-model : h-figure_curve_mae_by_nb_image
+model : h-figure_curve_mae_nb_image
 min_height : 0
 max_height : 50
 resolution : 2.5
 real_patch_size_plot : 500
 nb_jobs : 10
 seed : 12345
+date_column : lidar_acquisition_date
 print_config : True
 resampling_method_pred : max
-n_samples: null
+nb_samples: null
 
 data_dir : data/
 save_dir : ${data_dir}/logs/metrics/height_map/${model}
-output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
 grouping_dates : lidar_acquisition_date
 version_prediction : test_height_map
 version_metrics : test_height_map
@@ -40,7 +40,7 @@ get_images :
 
     height_pred : 
       _target_: src.postprocessing.metrics.get_images_utils.output_image_loader
-      path: ${data_dir}/logs/pred_sera/h-sera_h/${version_prediction}/predictions/data/h-sera_h_full.vrt
+      path: ${data_dir}/logs/pred_sera/h-sera_h_max/${version_prediction}/predictions/data/h-sera_h_max_full.vrt
       resolution: ${resolution}
       resampling_method: ${resampling_method_pred}
       scaling_factor: 1
@@ -83,7 +83,8 @@ get_metrics_local :
 
 get_metrics_global : 
   _target_: src.postprocessing.metrics.get_metrics_global_utils.get_metrics_global
-  metrics_to_print : ["bins_nb_image_mean_error"]
+  metrics_to_save : ["bins_nb_image_mean_error"]
+  output_path_xlsx : ${save_dir}/metrics_${model}.xlsx
   metrics_set :
     bins_nb_image_tuples_error :
       _target_: src.postprocessing.metrics.get_metrics_global_utils.concat_tuples_global_computer

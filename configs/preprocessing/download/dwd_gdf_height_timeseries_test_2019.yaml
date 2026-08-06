@@ -1,6 +1,6 @@
 root_dir: data/
-data_dir: ${root_dir}/sentinel/timeseries/height_map
-gdf_path : ${root_dir}/utils/gdf_height_map_initial.geojson
+data_dir: ${root_dir}/sentinel/timeseries/height_map_test_2019
+gdf_path : ${root_dir}/utils/gdf_height_map_initial_test_2019.geojson
 gee_project: 
   - "project_gee_1"
   - "project_gee_2"
@@ -8,7 +8,7 @@ gee_project:
 grouping_dates: lidar_acquisition_date
 
 resolution : 10
-tile_shape : 5000
+tile_shape : 1000
 max_tile_size : 10
 cloudless_portion : 60
 cloud_prb : 40

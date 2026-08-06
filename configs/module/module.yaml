@@ -1,7 +1,7 @@
 defaults:
   - regression_model: utae
   - super_resolution_model: edsr
-  - loss: huber
+  - loss: masked_huber
   - metrics: masked_forest_metrics
 
 optimizer:

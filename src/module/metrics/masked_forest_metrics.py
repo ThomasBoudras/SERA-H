@@ -11,15 +11,15 @@ class maskedForestMetrics(Metric):
     def __init__(
         self,
         metrics_calculator,
-        forest_mask_path,
-        classification_path,
+        ign_forest_mask_path,
+        lidarhd_classification_mask_path,
         classes_to_keep,
         resolution_target,
     ):
         super().__init__()
         self.metrics_calculator = metrics_calculator
-        self.forest_mask_gdf = gpd.read_parquet(forest_mask_path) if forest_mask_path is not None else None
-        self.classification_path = Path(classification_path).resolve() if classification_path is not None else None
+        self.ign_forest_mask_gdf = gpd.read_parquet(ign_forest_mask_path) if ign_forest_mask_path is not None else None
+        self.lidarhd_classification_mask_path = Path(lidarhd_classification_mask_path).resolve() if lidarhd_classification_mask_path is not None else None
         self.classes_to_keep = classes_to_keep
         self.resolution_target = resolution_target
 
@@ -30,17 +30,20 @@ class maskedForestMetrics(Metric):
     # Update the metrics for each batch
     def update(self, pred, target, metadata):
         # Get the vegetation mask
-        if self.classification_path is not None:
+        if self.lidarhd_classification_mask_path is not None:
             bounds_batch = metadata["bounds"]
             if "lidar_acquisition_date" in metadata:
-                lidar_years_batch = [str(date)[:4] for date in metadata["lidar_acquisition_date"]]
+                lidar_years_batch = [str(date.item())[:4] for date in metadata["lidar_acquisition_date"]]
+            else : 
+                lidar_years_batch = metadata["classification_years"] #change map dataset case (we have juste one year where we have classification)
             vegetation_mask = []
             for i, bounds in enumerate(bounds_batch):
-                year = lidar_years_batch[i].item()
-                classification_path = self.classification_path / str(year) / "lidar_classification.vrt"
+                year = lidar_years_batch[i]
+                year = year.item() if hasattr(year, "item") else year  # tensor (classification_years) vs str (lidar_acquisition_date)
+                lidarhd_classification_mask_path = self.lidarhd_classification_mask_path / str(year) / "lidar_classification.vrt"
                 mask, _ = get_vegetation_and_forest_mask(
-                    forest_mask_gdf=self.forest_mask_gdf,
-                    classification_raster_path=classification_path,
+                    ign_forest_mask_gdf=self.ign_forest_mask_gdf,
+                    lidarhd_classification_raster_path=lidarhd_classification_mask_path,
                     bounds=bounds.tolist(),
                     classes_to_keep=self.classes_to_keep,
                     resolution=self.resolution_target,
