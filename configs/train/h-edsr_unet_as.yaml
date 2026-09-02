@@ -21,6 +21,4 @@ datamodule:
         patch_size_input: 32
         patch_size_target: 128
         gdf_path: ${data_dir}/sentinel/composites/height_map/gdf_height_map_composites.geojson
-        get_targets:
-            targets_path: ${data_dir}/open_canopy/
 

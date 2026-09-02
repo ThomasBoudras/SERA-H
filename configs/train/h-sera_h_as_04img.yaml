@@ -13,6 +13,4 @@ datamodule:
         patch_size_target: 128
         get_inputs:
             nb_timeseries_image: 4
-        get_targets:
-            targets_path: ${data_dir}/open_canopy/
 

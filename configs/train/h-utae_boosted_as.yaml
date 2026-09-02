@@ -27,5 +27,3 @@ datamodule:
         patch_size_input: 128
         patch_size_target: 128
         resolution_input: 2.5
-        get_targets:
-            targets_path: ${data_dir}/open_canopy/

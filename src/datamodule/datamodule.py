@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import v2
+from tqdm import tqdm
 
 from src import global_utils as utils
 from src.datamodule.datamodule_utils import SubsetSampler
@@ -76,20 +77,29 @@ class Datamodule(L.LightningDataModule):
 
             # Instantiate a temporary dataset for calculation
             temp_train_dataset = self.hparams.train_dataset
-
+            
+            if self.hparams.max_n_inputs_for_moments_computation is None :
+                self.hparams.max_n_inputs_for_moments_computation = len(temp_train_dataset)
+       
             mean_std_per_image = []
-            while len(mean_std_per_image) < self.hparams.max_n_inputs_for_moments_computation:
-                index = np.random.randint(0, len(temp_train_dataset))
-                x, y, metadata = temp_train_dataset[index]
-                x[~torch.isfinite(x)] = 0
-                if len(x.shape) == 4:
-                    for i in range(x.shape[0]):
-                        x_i = x[i]
-                        mean_std = (x_i.mean(axis=(1, 2)), x_i.std(axis=(1, 2)))
+
+            with tqdm(total=self.hparams.max_n_inputs_for_moments_computation, desc="Computing moments") as pbar:
+                while len(mean_std_per_image) < self.hparams.max_n_inputs_for_moments_computation:
+                    index = np.random.randint(0, len(temp_train_dataset))
+                    x, y, metadata = temp_train_dataset[index]
+                    x[~torch.isfinite(x)] = 0
+                    if len(x.shape) == 4:
+                        for i in range(x.shape[0]):
+                            if len(mean_std_per_image) >= self.hparams.max_n_inputs_for_moments_computation:
+                                break
+                            x_i = x[i]
+                            mean_std = (x_i.mean(axis=(1, 2)), x_i.std(axis=(1, 2)))
+                            mean_std_per_image.append(mean_std)
+                            pbar.update(1)
+                    else:
+                        mean_std = (x.mean(axis=(1, 2)), x.std(axis=(1, 2)))
                         mean_std_per_image.append(mean_std)
-                else:
-                    mean_std = (x.mean(axis=(1, 2)), x.std(axis=(1, 2)))
-                    mean_std_per_image.append(mean_std)
+                        pbar.update(1)
             mean_per_image, std_per_image = zip(*mean_std_per_image)
 
             input_mean = np.mean(np.array(mean_per_image), axis=0)

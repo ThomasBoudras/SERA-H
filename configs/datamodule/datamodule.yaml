@@ -6,7 +6,7 @@ instance:
   batch_size: 2
   num_workers: 9
   persistent_workers: True
-  max_n_inputs_for_moments_computation: 1000
+  max_n_inputs_for_moments_computation: 3000
   max_n_inputs_per_epoch: null
   normalization_save_path: ${data_dir}/normalization/sentinel
   mode: load # Default mode is load (training), presave script will override to save

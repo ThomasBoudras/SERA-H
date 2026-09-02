@@ -3,11 +3,7 @@
 project: "train_sera"
 run_name: h-sera_h
 run_version: v1_${run_name}
-data_dir: data
 ckpt_path: last
 
-datamodule:
-    dataset:
-        get_targets:
-            targets_path: ${data_dir}/open_canopy/
+
 

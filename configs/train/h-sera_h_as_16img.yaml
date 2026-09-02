@@ -11,6 +11,4 @@ datamodule:
     dataset:
         patch_size_input: 32
         patch_size_target: 128
-        get_targets:
-            targets_path: ${data_dir}/open_canopy/
 

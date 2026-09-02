@@ -275,10 +275,7 @@ class mask_image_loader:
 
     Args:
         lidarhd_classification_mask_path: Path to the LidarHD classification
-            raster (may contain a `<year>` placeholder), takes precedence over
-            `height_classification_mask_path` if both are set.
-        height_classification_mask_path: Fallback path used when
-            `lidarhd_classification_mask_path` is None.
+            raster (may contain a `<year>` placeholder)
         ign_forest_mask_path: Optional path to an IGN forest mask GeoParquet
             file, unioned with the classification mask.
         resolution: Target pixel resolution used when reading the window.
@@ -289,18 +286,13 @@ class mask_image_loader:
 
     def __init__(
         self,
-        lidarhd_classification_mask_path: Optional[str],
-        height_classification_mask_path: Optional[str],
+        lidarhd_classification_mask_path: str,
         ign_forest_mask_path: Optional[str],
         resolution: float,
         classes_to_keep: list,
         grouping_dates: str,
     ) -> None:
-        self.lidarhd_classification_mask_path = (
-            lidarhd_classification_mask_path
-            if lidarhd_classification_mask_path is not None
-            else height_classification_mask_path
-        )
+        self.lidarhd_classification_mask_path = lidarhd_classification_mask_path
         self.ign_forest_mask_gdf = (
             gpd.read_parquet(ign_forest_mask_path) if ign_forest_mask_path is not None else None
         )
